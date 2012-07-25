@@ -8,6 +8,8 @@ if false then
    local knn = Knn()
 
    -- average of k nearest neighbors in xs to query
+   -- xs are the inputs
+   -- ys are the targets
    local estimate = Knn:estimate(xs, ys, query, k) -- use Euclidean distance
 
    -- re-estimate xs[queryIndex] using k nearest neighbor
@@ -33,12 +35,12 @@ end
 -- estimate y for a new query point using the Euclidean distance
 -- ARGS:
 -- xs:    2D Tensor
---        the i-th sample is xs[i]
+--        the i-th input sample is xs[i]
 -- ys:    1D Tensor or array of numbers
---        y[i] is the known value of sample xs[i]
---        number of ys must equal number of xs
+--        y[i] is the known value (target) of input sample xs[i]
+--        number of ys must equal number of rows in xs
 -- query: 1D Tensor
--- k    : number, >= 1 
+-- k:     number >= 1 
 --        math.floor(k) neighbors are considered
 --
 -- RESULTS:
@@ -64,10 +66,10 @@ end
 -- re-estimate y for an existing xs[queryIndex]
 -- ARGS:
 -- xs:         2D Tensor
---             the i-th sample is xs[i]
+--             the i-th input sample is xs[i]
 -- ys:         1D Tensor or array of numbers
---             y[i] is the known value of sample xs[i]
---             number of ys must equal number of xs
+--             y[i] is the known value (target) of input sample xs[i]
+--             number of ys must equal number of rows in xs 
 -- queryIndex: number >= 1
 --             xs[math.floor(queryIndex)] is re-estimated
 -- k:          number, >= 1 
@@ -77,9 +79,6 @@ end
 -- estimate: scalar
 --           average y value of the k nearest neighbors in the xs
 --           from the query using the Euclidean distance 
---
--- NOTES:
--- (1) This all-at-once code is based on Clement Farabet's original design
 function Knn:smooth(xs, ys, queryIndex, k)
    local trace = false
    -- type check and value check the arguments
@@ -144,6 +143,7 @@ function Knn:_determineEuclideanDistances(xs, query)
    -- create a 2D Tensor where each row is the query
    -- This construction is space efficient relative to replicating query
    -- queries[i] == query for all i in range
+   -- Thanks Clement!
    local queries = 
       torch.Tensor(query:storage(),
                    1,               -- offset
