@@ -34,17 +34,17 @@ end
 
 -- estimate y for a new query point using the Euclidean distance
 -- ARGS:
--- xs:    2D Tensor
---        the i-th input sample is xs[i]
--- ys:    1D Tensor or array of numbers
---        y[i] is the known value (target) of input sample xs[i]
---        number of ys must equal number of rows in xs
--- query: 1D Tensor
--- k:     number >= 1 
---        math.floor(k) neighbors are considered
+-- xs    : 2D Tensor
+--         the i-th input sample is xs[i]
+-- ys    : 1D Tensor or array of numbers
+--         y[i] is the known value (target) of input sample xs[i]
+--         number of ys must equal number of rows in xs
+-- query : 1D Tensor
+-- k     : number >= 1 
+--          math.floor(k) neighbors are considered
 --
 -- RESULTS:
--- estimate: scalar
+-- estimate : number
 --           average y value of the k nearest neighbors in the xs
 --           from the query using the Euclidean distance 
 function Knn:estimate(xs, ys, query, k)
@@ -65,21 +65,23 @@ end
 
 -- re-estimate y for an existing xs[queryIndex]
 -- ARGS:
--- xs:         2D Tensor
---             the i-th input sample is xs[i]
--- ys:         1D Tensor or array of numbers
---             y[i] is the known value (target) of input sample xs[i]
---             number of ys must equal number of rows in xs 
--- queryIndex: number >= 1
---             xs[math.floor(queryIndex)] is re-estimated
--- k:          number, >= 1 
---             math.floor(k) neighbors are considered
---
+-- xs            : 2D Tensor
+--                 the i-th input sample is xs[i]
+-- ys            : 1D Tensor or array of numbers
+--                 y[i] is the known value (target) of input sample xs[i]
+--                 number of ys must equal number of rows in xs 
+-- queryIndex    : number >= 1
+--                 xs[math.floor(queryIndex)] is re-estimated
+-- k             : number >= 1 
+--                 math.floor(k) neighbors are considered
+-- useQueryPoint : boolean
+--                if true, use the point at queryIndex as a neighbor
+--                if false, don't
 -- RESULTS:
--- estimate: scalar
---           average y value of the k nearest neighbors in the xs
---           from the query using the Euclidean distance 
-function Knn:smooth(xs, ys, queryIndex, k)
+-- estimate : number
+--            average y value of the k nearest neighbors in the xs
+--            from the query using the Euclidean distance 
+function Knn:smooth(xs, ys, queryIndex, k, useQueryPoint)
    local trace = false
    -- type check and value check the arguments
    self:_typeAndValueCheck(xs, ys, k)
@@ -88,14 +90,20 @@ function Knn:smooth(xs, ys, queryIndex, k)
           'queryIndex must be a number')
    assert(queryIndex >= 1,
           'queryIndex must be at least 1')
-   assert(queryIndex <= xs:size(2),
-          'queryIndex cannot exceed number of samples (=xs:size(2))')
+   assert(queryIndex <= xs:size(1),
+          'queryIndex cannot exceed number of samples = ' .. xs:size(1))
+
+   assert(type(useQueryPoint) == 'boolean')
 
    local distances = 
       self:_determineEuclideanDistances(xs, xs[math.floor(queryIndex)])
    
-   -- make the distance from the query index to itself large
-   distances[queryIndex] = math.huge
+   -- make the distance from the query index to itself large, if
+   -- we are not using the query point is a neighbor
+   if not useQueryPoint then
+      distances[queryIndex] = math.huge
+   end
+
    local result = self:_averageKNearest(distances, ys, k)
 
    if trace then
@@ -167,28 +175,34 @@ end
 
 -- verify type and values of arguments
 function Knn:_typeAndValueCheck(xs, ys, k)
+   -- type and value check xs
    assert(xs,
           'xs must be supplied')
+   assert(string.match(torch.typename(xs), 'torch%..*Tensor'),
+          'xs must be a Tensor')
    assert(xs:dim() == 2,
           'xs must be 2D Tensor')
 
+   -- type and value check ys
    assert(ys,
           'ys must be supplied')
-   assert(ys[1],
-          'ys must be subscriptable by one value')
    if type(ys) == 'table' then
       assert(#ys == xs:size(1), 
-             'number of ys must equal number of samples')
-   else
+             'number of ys must equal number of xs')
+   elseif string.match(torch.typename(ys), 'torch%..*Tensor') then
+      assert(ys:dim() == 1, 'ys must be a 1D Tensor')
       assert(ys:size(1) == xs:size(1),
-             'number of ys must equal number of samples')
+             'number of ys must equal number of xs')
+   else
+      assert(false, 'ys must be an array or a 1D Tensor')
    end
+   assert(ys[1],
+          'ys must be subscriptable by one value')
 
+   -- type and value check k
    assert(type(k) == 'number',
           'k must be a number')
    assert(k >= 1,
           'k must be at least 1')
 
 end
-
-
