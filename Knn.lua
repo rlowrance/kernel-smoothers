@@ -14,7 +14,9 @@ if false then
 
    -- re-estimate xs[queryIndex] using k nearest neighbor
    -- exclude ys[queryIndex] from this estimate
-   local smoothedEstimate = Knn:smooth(xs, ys, queryIndex, k)
+   loca useQueryPoint = false
+   local smoothedEstimate = Knn:smooth(xs, ys, queryIndex, k,
+                                      useQueryPoint)
 end
 
 -- create the class object
@@ -119,9 +121,13 @@ function Knn:smooth(xs, ys, queryIndex, k, useQueryPoint)
    return result
 end
 
------------------------------------------------------------------------------
--- private methods
------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+-- PRIVATE METHODS
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+-- _averageNearest
+--------------------------------------------------------------------------------
 
 -- return average of the k nearest samples
 function Knn:_averageKNearest(distances, ys, k)
@@ -138,6 +144,10 @@ function Knn:_averageKNearest(distances, ys, k)
    -- return average of the k nearest neighbors
    return sum / k
 end
+
+--------------------------------------------------------------------------------
+-- _determineEuclideanDistances
+--------------------------------------------------------------------------------
 
 -- return 1D tensor such that result[i] = EuclideanDistance(xs[i], query)
 -- We require use of Euclidean distance so that this code will work.
@@ -172,6 +182,10 @@ function Knn:_determineEuclideanDistances(xs, query)
 
       return distances
 end
+
+--------------------------------------------------------------------------------
+-- _typeAndValueCheck
+--------------------------------------------------------------------------------
 
 -- verify type and values of arguments
 function Knn:_typeAndValueCheck(xs, ys, k)
