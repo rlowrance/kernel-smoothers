@@ -94,7 +94,7 @@ end
 --            from the query using the Euclidean distance 
 function Kwavg:smooth(xs, ys, queryIndex, lambda, 
                       useQueryPoint, errorIfZeroSumWeights)
-   local trace = false
+   local trace = true
    -- type check and value check the arguments
    self:_typeAndValueCheck(xs, ys, lambda)
 
@@ -117,8 +117,24 @@ function Kwavg:smooth(xs, ys, queryIndex, lambda,
    local weights = 
       self:_determineWeights(xs, xs[math.floor(queryIndex)], lambda)
 
-   if trace then
-      print('smooth: weights before adjustments\n', weights)
+   if false and trace then
+      -- check if all weights are close to zero
+      local tolerance = 1e-6
+      print('Kwavg:smooth weights >', tolerance)
+      print(' number of weights', weights:size(1))
+      local countPrinted = 0
+      for i = 1, weights:size(1) do
+         if weights[i] > tolerance then
+            print(' i, weight', i, weights[i])
+            if i == queryIndex then
+               print(' above i value is for the queryIndex')
+            end
+            countPrinted = countPrinted + 1
+         end
+      end
+      if countPrinted == 0 then
+         error(' all weights close to zero')
+      end
    end
 
    -- if not using the point at queryIndex, make its weight 0
@@ -126,7 +142,12 @@ function Kwavg:smooth(xs, ys, queryIndex, lambda,
       weights[queryIndex] = 0
    end
    
-   return self:_weightedAverage(weights, ys, errorIfZeroSumWeights)
+   local result = self:_weightedAverage(weights, ys, errorIfZeroSumWeights)
+   if trace then
+      print('Kwavg:smooth result', result)
+   end
+   
+   return result
 end
 
 --------------------------------------------------------------------------------
@@ -142,7 +163,7 @@ end
 -- It computes all the distances from the query point at once
 -- using Clement Farabet's idea to speed up the computation.
 function Kwavg:_determineWeights(xs, query, lambda)
-   local trace = false
+   local trace = true
    assert(xs)
    assert(query)
    assert(lambda)
@@ -168,20 +189,36 @@ function Kwavg:_determineWeights(xs, query, lambda)
       
       if trace then
          print('Kwavg:_determineWeights')
-         print('xs\n', xs)
-         print('query\n', query)
-         print('distances\n', distances)
+         print('query\n', query)    
+         local sizeLimit = 10
+         --self:_print2DTensor(xs, 'xs')
+         self:_print1DTensor(distances, 'distances')
+         -- check that distances are not all zero
+         local tolerance = 1e-15
+         local countAtLeastTolerance = 0
+         for index = 1, distances:size(1) do
+            if distances[index] > tolerance then
+               countAtLeastTolerance = countAtLeastTolerance + 1
+            end
+         end
+         print(string.format('number of distance at least %f is %d',
+                             tolerance, countAtLeastTolerance))
+         print('lambda', lambda)
       end
 
       local t = distances / lambda
-      if trace then print('t\n', t) end
       
       local one = torch.Tensor(xs:size(1)):fill(1)
       local dt = torch.mul(one - torch.cmul(t, t), 0.75)
       local le = torch.le(torch.abs(t), one):type('torch.DoubleTensor')
       local weights = torch.cmul(le, dt)
-      if trace then print('weights\n', weights) end
-      --if lambda == 1 then halt() end
+      if trace then 
+         self:_print1DTensor(t, 't')
+         self:_print1DTensor(dt, 'dt')
+         self:_print1DTensor(le, 'le')
+         self:_print1DTensor(weights, 'weights')
+      end
+
       return weights
 end
 
@@ -191,26 +228,75 @@ end
 
 -- return weighted average of the weights and y values
 function Kwavg:_weightedAverage(weights, ys, errorIfZeroSumWeights)
-   local trace = false
+   local trace = true
    assert(weights)
    assert(ys)
    assert(errorIfZeroSumWeights)
 
    local sumWeights = torch.sum(weights)
-   if sumWeights == 0 and ignoreZeroSumWeights == false then
+   --assert(weights[3] > 0.5, 'weights[3] = ' .. weights[3])
+   if sumWeights == 0 and ignoreIfZeroSumWeights == false then
       assert(sumWeights > 0, 
              'sum of weights are not positive; is ' .. sumWeights)
    end
+
+   local numerator = torch.sum(torch.cmul(weights, ys))
+   local result = numerator / sumWeights
    if trace then 
       print('Kwavg:_weightedAverage')
-      print('weights\n', weights)
-      print('ys\n', ys)
-      print(string.format('numerator=%f', torch.sum(torch.cmul(weights, ys))))
-      print(string.format('denominator=%f', sumWeights))
+      --print('weights\n', weights)
+      --print('ys\n', ys)
+      print(' errorIfZeroSumWeights', errorIfZeroSumWeights)
+      print(string.format(' sumWeights = %0.15f', sumWeights))
+      print(string.format(' numerator  = %0.15f', numerator))
+      print(string.format(' result     = %0.15f', result))
    end
-   return torch.sum(torch.cmul(weights, ys)) / sumWeights
+   return result
 end
 
+--------------------------------------------------------------------------------
+-- _print1DTensor
+--------------------------------------------------------------------------------
+
+-- print entire Tensor or just first entries if its large
+function Kwavg:_print1DTensor(t, name)
+   assert(t)
+   assert(name)
+
+   print(string.format('tensor %s of type %s', name, torch.typename(t)))
+   local sizeLimit = 10
+   if t:size(1) <= sizeLimit then
+      print(t)
+   else
+      print(string.format('first %d entries are:', sizeLimit))
+      for i = 1, sizeLimit do
+         print(string.format('%s[%d] = %f', name, i, t[i]))
+      end
+   end
+end
+
+--------------------------------------------------------------------------------
+-- _print2DTensor
+--------------------------------------------------------------------------------
+
+-- print entire Tensor or just first entries if its large
+function Kwavg:_print2DTensor(t, name)
+   assert(t)
+   assert(name)
+
+   print(string.format('tensor %s of type %s', name, torch.typename(t)))
+   local sizeLimit = 10
+   if t:size(1) <= sizeLimit then
+      print(t)
+   else
+      print(string.format('first %d entries are:', sizeLimit))
+      for i = 1, sizeLimit do
+         print(string.format('%s[%d] = %f', name, i, t[i]))
+      end
+   end
+end
+
+         
 --------------------------------------------------------------------------------
 -- _typeAndValueCheck
 --------------------------------------------------------------------------------
