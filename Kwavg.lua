@@ -139,7 +139,7 @@ function Kwavg:smooth(xs, ys, queryIndex, lambda, useQueryPoint)
       weights[queryIndex] = 0
    end
    
-   local ok, value = self:_weightedAverage(weights, ys, errorIfZeroSumWeights)
+   local ok, value = self:_weightedAverage(weights, ys)
    if trace then
       print('Kwavg:smooth ok, value', ok, value)
    end
