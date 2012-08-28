@@ -46,9 +46,10 @@ end
 --                         if true, return NaN as the estimates in this case    
 --
 -- RESULTS:
--- estimate : number
---            weighted average y value using the construction-time 
---            specified kernel function
+-- true, estimate : estimate is the estimate for the query
+--                  estimate is a number
+-- false, reason  : no estimate was produced
+--                  rsult is a string
 function Kwavg:estimate(xs, ys, query, lambda, errorIfZeroSumWeights)
    -- type check and value check the arguments
    self:_typeAndValueCheck(xs, ys, lambda)

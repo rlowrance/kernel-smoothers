@@ -32,18 +32,19 @@ function tests.estimate()
    for lambda = 1, 6 do
       local kwavg = Kwavg('epanechnikov quadratic')
       local errorIfZeroSumWeights = false
-      local actual = kwavg:estimate(xs, ys, query, lambda,
-                                    errorIfZeroSumWeights)
-      local expected = expectedSeq[lambda]
-      if trace then
-         print('lambda, actual, expected', lambda, actual, expected)
-      end
-      if expected ~= expected then -- if expected == nan
-         tester:assert(actual ~= actual, 'lambda = 1')
+      local ok, actual = kwavg:estimate(xs, ys, query, lambda,
+                                        errorIfZeroSumWeights)
+      if lambda == 1 then
+         tester:assert(not ok, 'lambda=' .. lambda)
       else
+         tester:assert(ok, 'lambda=' .. lambda)
+         local expected = expectedSeq[lambda]
+         if trace then
+            print('lambda, actual, expected', lambda, actual, expected)
+         end
          local tolerance = 0.0001
          tester:assert(math.abs(expected - actual) < tolerance, 
-                       'lambda=' .. lambda)
+                          'lambda=' .. lambda)
       end
    end
 end
@@ -61,16 +62,17 @@ function tests.smooth1()
       local kwavg = Kwavg('epanechnikov quadratic')
       local errorIfZeroSumWeights = false
       local useQueryPoint = false
-      local actual = kwavg:smooth(xs, ys, i, i,
-                                  useQueryPoint,
-                                  errorIfZeroSumWeights)
-      local expected = expectedSeq[i]
-      if trace then 
-         print('i, actual, expected', i, actual, expected)
-      end
-      if expected ~= expected then -- if expected == nan
-         tester:assert(actual ~= actual, 'i = 1')
+      local ok, actual = kwavg:smooth(xs, ys, i, i,
+                                      useQueryPoint,
+                                      errorIfZeroSumWeights)
+      if i == 1 then
+         tester:assert(not ok, 'i=' .. i)
       else
+         tester:assert(ok, 'i=' .. i)
+         local expected = expectedSeq[i]
+         if trace then 
+            print('i, actual, expected', i, actual, expected)
+         end
          local tolerance = 0.0002
          tester:assert(math.abs(expected - actual) < tolerance, 
                        'i=' .. i)
@@ -89,9 +91,10 @@ function tests.smooth2()
       local kwavg = Kwavg('epanechnikov quadratic')
       local errorIfZeroSumWeights = false
       local useQueryPoint = true
-      local actual = kwavg:smooth(xs, ys, queryIndex, lambda,
+      local ok, actual = kwavg:smooth(xs, ys, queryIndex, lambda,
                                   useQueryPoint,
                                   errorIfZeroSumWeights)
+      tester:assert(ok, 'no error')
       if trace then
          print('queryIndex, lambda, actual, expected', 
                queryIndex, lambda, actual, expected)
