@@ -89,12 +89,12 @@ end
 --                         if true, return NaN as the estimates in this case    
 --
 -- RESULTS:
--- estimate : number
---            average y value of the k nearest neighbors in the xs
---            from the query using the Euclidean distance 
-function Kwavg:smooth(xs, ys, queryIndex, lambda, 
-                      useQueryPoint, errorIfZeroSumWeights)
-   local trace = true
+-- true, estimate : estimate is the estimate at the query index
+--                  estimate is a number
+-- false, reason  : no estimate was produced
+--                  reason is a string
+function Kwavg:smooth(xs, ys, queryIndex, lambda, useQueryPoint)
+   local trace = false
    -- type check and value check the arguments
    self:_typeAndValueCheck(xs, ys, lambda)
 
@@ -109,10 +109,6 @@ function Kwavg:smooth(xs, ys, queryIndex, lambda,
       error('useQueryPoint not supplied')
    end
    assert(type(useQueryPoint) == 'boolean')
-
-   local errorIfZeroSumWeights
-   if errorIfZeroSumWeights == nil then errorIfZeroSumWeights = true end
-   assert(type(errorIfZeroSumWeights) == 'boolean')
 
    local weights = 
       self:_determineWeights(xs, xs[math.floor(queryIndex)], lambda)
@@ -142,12 +138,12 @@ function Kwavg:smooth(xs, ys, queryIndex, lambda,
       weights[queryIndex] = 0
    end
    
-   local result = self:_weightedAverage(weights, ys, errorIfZeroSumWeights)
+   local ok, value = self:_weightedAverage(weights, ys, errorIfZeroSumWeights)
    if trace then
-      print('Kwavg:smooth result', result)
+      print('Kwavg:smooth ok, value', ok, value)
    end
    
-   return result
+   return ok, value
 end
 
 --------------------------------------------------------------------------------
@@ -163,7 +159,7 @@ end
 -- It computes all the distances from the query point at once
 -- using Clement Farabet's idea to speed up the computation.
 function Kwavg:_determineWeights(xs, query, lambda)
-   local trace = true
+   local trace = false
    assert(xs)
    assert(query)
    assert(lambda)
@@ -226,32 +222,39 @@ end
 -- _weightedAverage
 --------------------------------------------------------------------------------
 
--- return weighted average of the weights and y values
-function Kwavg:_weightedAverage(weights, ys, errorIfZeroSumWeights)
-   local trace = true
+-- attempt to weighted average of the weights and y values
+-- RETURNS
+-- true, weightedAverage : if the weighted average can be determined
+--                         weightedAverage is a number
+-- false, reason         : if the weighted average cannot be determined
+--                         reason is a string          
+function Kwavg:_weightedAverage(weights, ys)
+   local trace = false
    assert(weights)
    assert(ys)
-   assert(errorIfZeroSumWeights)
 
    local sumWeights = torch.sum(weights)
    --assert(weights[3] > 0.5, 'weights[3] = ' .. weights[3])
-   if sumWeights == 0 and ignoreIfZeroSumWeights == false then
-      assert(sumWeights > 0, 
-             'sum of weights are not positive; is ' .. sumWeights)
+   if sumWeights == 0 then
+      local reason = 'no observations within lambda of query observation'
+      if trace then
+         print('Kwavg:_weightedAverage returning false,', reason)
+      end
+      return false, reason
    end
 
    local numerator = torch.sum(torch.cmul(weights, ys))
    local result = numerator / sumWeights
+   assert(result == result, 'result is NaN')
    if trace then 
       print('Kwavg:_weightedAverage')
       --print('weights\n', weights)
       --print('ys\n', ys)
-      print(' errorIfZeroSumWeights', errorIfZeroSumWeights)
       print(string.format(' sumWeights = %0.15f', sumWeights))
       print(string.format(' numerator  = %0.15f', numerator))
       print(string.format(' result     = %0.15f', result))
    end
-   return result
+   return true, result
 end
 
 --------------------------------------------------------------------------------
