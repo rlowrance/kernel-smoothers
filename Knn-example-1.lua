@@ -20,9 +20,18 @@ local function computeRmse(k, xs, ys)
    local useQueryPoint = false -- don't use the query point to estimate itself
    local sumSquaredErrors = 0
    for queryIndex = 1, nObservations do
-      local estimate = knn:smooth(xs, ys, queryIndex, k, useQueryPoint)
-      local error = ys[queryIndex] - estimate
-      sumSquaredErrors = sumSquaredErrors + error * error
+      local ok, value = knn:smooth(xs, ys, queryIndex, k, useQueryPoint)
+      if not ok then
+         -- the estimate could not be provided
+         -- value says why
+         error('no estimate; queryIndex=' .. queryIndex .. ' reason=' .. value)
+      else
+         -- the estimate was provided
+         -- it's in value
+         local estimate = value
+         local error = ys[queryIndex] - estimate
+         sumSquaredErrors = sumSquaredErrors + error * error
+      end
    end
    return math.sqrt(sumSquaredErrors)
 end
