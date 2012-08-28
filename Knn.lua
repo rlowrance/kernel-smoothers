@@ -14,7 +14,7 @@ if false then
 
    -- re-estimate xs[queryIndex] using k nearest neighbor
    -- exclude ys[queryIndex] from this estimate
-   loca useQueryPoint = false
+   local useQueryPoint = false
    local smoothedEstimate = Knn:smooth(xs, ys, queryIndex, k,
                                       useQueryPoint)
 end
@@ -44,11 +44,11 @@ end
 -- query : 1D Tensor
 -- k     : number >= 1 
 --          math.floor(k) neighbors are considered
---
 -- RESULTS:
--- estimate : number
---           average y value of the k nearest neighbors in the xs
---           from the query using the Euclidean distance 
+-- true, estimate : estimate is the estimate for the query
+--                  estimate is a number
+-- false, reason  : no estimate was produced
+--                  rsult is a string
 function Knn:estimate(xs, ys, query, k)
    -- type check and value check the arguments
    self:_typeAndValueCheck(xs, ys, k)
@@ -80,9 +80,10 @@ end
 --                if true, use the point at queryIndex as a neighbor
 --                if false, don't
 -- RESULTS:
--- estimate : number
---            average y value of the k nearest neighbors in the xs
---            from the query using the Euclidean distance 
+-- true, estimate : estimate is the estimate for the query
+--                  estimate is a number
+-- false, reason  : no estimate was produced
+--                  rsult is a string
 function Knn:smooth(xs, ys, queryIndex, k, useQueryPoint)
    local trace = false
    -- type check and value check the arguments
@@ -95,7 +96,8 @@ function Knn:smooth(xs, ys, queryIndex, k, useQueryPoint)
    assert(queryIndex <= xs:size(1),
           'queryIndex cannot exceed number of samples = ' .. xs:size(1))
 
-   assert(type(useQueryPoint) == 'boolean')
+   assert(type(useQueryPoint) == 'boolean',
+          'useQueryPoint must be a boolean')
 
    local distances = 
       self:_determineEuclideanDistances(xs, xs[math.floor(queryIndex)])
@@ -106,7 +108,7 @@ function Knn:smooth(xs, ys, queryIndex, k, useQueryPoint)
       distances[queryIndex] = math.huge
    end
 
-   local result = self:_averageKNearest(distances, ys, k)
+   local ok, value = self:_averageKNearest(distances, ys, k)
 
    if trace then
       print('Knn:smooth')
@@ -115,10 +117,11 @@ function Knn:smooth(xs, ys, queryIndex, k, useQueryPoint)
       print('queryIndex', queryIndex)
       print('xs[math.floor(queryIndex)]', xs[math.floor(queryIndex)])
       print('k', k)
-      print('result', result)
+      print('ok', ok)
+      print('value', value)
    end
 
-   return result
+   return ok, value
 end
 
 --------------------------------------------------------------------------------
@@ -141,8 +144,14 @@ function Knn:_averageKNearest(distances, ys, k)
       sum = sum + ys[sortIndices[index]]
    end
 
-   -- return average of the k nearest neighbors
-   return sum / k
+   -- return average of the k nearest neighbors or an error if k is 0
+   if k < 0 then
+      return false, 'k, once rounded to an integer, is negative'
+   elseif k == 0 then
+      return false, 'k, once rounded to an integer, is zero'
+   else
+      return true, sum / k
+   end
 end
 
 --------------------------------------------------------------------------------
@@ -214,9 +223,8 @@ function Knn:_typeAndValueCheck(xs, ys, k)
           'ys must be subscriptable by one value')
 
    -- type and value check k
+   -- negative and zero values for k are detected when the average is 
+   -- computed
    assert(type(k) == 'number',
           'k must be a number')
-   assert(k >= 1,
-          'k must be at least 1')
-
 end
