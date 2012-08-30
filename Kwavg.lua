@@ -41,29 +41,30 @@ end
 --          number of ys must equal number of rows in xs
 -- query  : 1D Tensor
 -- lambda : number > 0, xs outside of this radius are given 0 weights
--- errorIfZeroSumWeights : boolean, optional, default false
---                         if false, call error if the weights sum to zero
---                         if true, return NaN as the estimates in this case    
---
 -- RESULTS:
 -- true, estimate : estimate is the estimate for the query
 --                  estimate is a number
 -- false, reason  : no estimate was produced
 --                  rsult is a string
-function Kwavg:estimate(xs, ys, query, lambda, errorIfZeroSumWeights)
+function Kwavg:estimate(xs, ys, query, lambda)
+   local trace = true
    -- type check and value check the arguments
    self:_typeAndValueCheck(xs, ys, lambda)
 
    assert(query:dim() == 1,
           'query must be 1D Tensor')
 
-   local errorIfZeroSumWeights
-   if errorIfZeroSumWeights == nil then errorIfZeroSumWeights = true end
-   assert(type(errorIfZeroSumWeights) == 'boolean')
-
+   if trace then
+      print('Kwavg:estimate')
+      print(' xs:size()', xs:size())
+      print(' ys:size()', ys:size())
+      print(' query:size()', query:size())
+      print(' lambda', lambda)
+   end
+   
    local weights = self:_determineWeights(xs, query, lambda)
    
-   return self:_weightedAverage(weights, ys, errorIfZeroSumWeights)
+   return self:_weightedAverage(weights, ys)
 
 end
 
@@ -230,7 +231,7 @@ end
 -- false, reason         : if the weighted average cannot be determined
 --                         reason is a string          
 function Kwavg:_weightedAverage(weights, ys)
-   local trace = false
+   local trace = true
    assert(weights)
    assert(ys)
 
@@ -242,6 +243,12 @@ function Kwavg:_weightedAverage(weights, ys)
          print('Kwavg:_weightedAverage returning false,', reason)
       end
       return false, reason
+   end
+
+   if trace then
+      print('Kwavg:_weightedAverage')
+      print(' weights:size()', weights:size())
+      print(' ys:size()', ys:size())
    end
 
    local numerator = torch.sum(torch.cmul(weights, ys))
