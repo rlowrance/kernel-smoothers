@@ -47,10 +47,11 @@ end
 -- false, reason  : no estimate was produced
 --                  rsult is a string
 function Kwavg:estimate(xs, ys, query, lambda)
-   local trace = true
+   local trace = false
    -- type check and value check the arguments
    self:_typeAndValueCheck(xs, ys, lambda)
 
+   assert(query)
    assert(query:dim() == 1,
           'query must be 1D Tensor')
 
@@ -231,7 +232,7 @@ end
 -- false, reason         : if the weighted average cannot be determined
 --                         reason is a string          
 function Kwavg:_weightedAverage(weights, ys)
-   local trace = true
+   local trace = false
    assert(weights)
    assert(ys)
 
