@@ -7,17 +7,23 @@ require 'affirm'
 if false then
    local knn = Knn()
 
-   -- average of k nearest neighbors in xs to query
+   -- average of k nearest neighbors using Euclidean distance in xs to query
    -- xs are the inputs
    -- ys are the targets
-   local estimate = Knn:estimate(xs, ys, query, k) -- use Euclidean distance
+   local ok, estimate = Knn:estimate(xs, ys, query, k)
+   if not ok then
+      handleError()
+   end
 
    -- re-estimate xs[queryIndex] using k nearest neighbor
    -- exclude ys[queryIndex] from this estimate
    local useQueryPoint = false
-   local smoothedEstimate = Knn:smooth(xs, ys, queryIndex, k,
-                                      useQueryPoint)
-end
+   local ok, smoothedEstimate = Knn:smooth(xs, ys, queryIndex, k,
+                                           useQueryPoint)
+   if not ok then 
+      handleError()
+   end
+end -- API overview
 
 --------------------------------------------------------------------------------
 -- CONSTRUCTION
