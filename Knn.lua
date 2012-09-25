@@ -1,7 +1,7 @@
 -- knn.lua
 -- k nearest neighbors algorithm
 
-require 'torch'
+require 'affirm'
 
 -- examples
 if false then
@@ -52,9 +52,7 @@ end
 function Knn:estimate(xs, ys, query, k)
    -- type check and value check the arguments
    self:_typeAndValueCheck(xs, ys, k)
-
-   assert(query:dim() == 1,
-          'query must be 1D Tensor')
+   affirm.isTensor1D(ys, 'ys')
 
    local distances = self:_determineEuclideanDistances(xs, query)
    
@@ -88,22 +86,17 @@ function Knn:smooth(xs, ys, queryIndex, k, useQueryPoint)
    local trace = false
    -- type check and value check the arguments
    self:_typeAndValueCheck(xs, ys, k)
+   affirm.isIntegerPositive(queryIndex, 'queryIndex')
+   affirm.isBoolean(useQueryPoint, 'useQueryPoint')
 
-   assert(type(queryIndex) == 'number',
-          'queryIndex must be a number')
-   assert(queryIndex >= 1,
-          'queryIndex must be at least 1')
    assert(queryIndex <= xs:size(1),
           'queryIndex cannot exceed number of samples = ' .. xs:size(1))
 
-   assert(type(useQueryPoint) == 'boolean',
-          'useQueryPoint must be a boolean')
-
    local distances = 
-      self:_determineEuclideanDistances(xs, xs[math.floor(queryIndex)])
+      self:_determineEuclideanDistances(xs, xs[queryIndex])
    
    -- make the distance from the query index to itself large, if
-   -- we are not using the query point is a neighbor
+   -- we are not using the query point as a neighbor
    if not useQueryPoint then
       distances[queryIndex] = math.huge
    end
@@ -128,10 +121,6 @@ end
 -- PRIVATE METHODS
 --------------------------------------------------------------------------------
 
---------------------------------------------------------------------------------
--- _averageNearest
---------------------------------------------------------------------------------
-
 -- return average of the k nearest samples
 function Knn:_averageKNearest(distances, ys, k)
    -- determine indices that sort the distances in increasing order
@@ -153,10 +142,6 @@ function Knn:_averageKNearest(distances, ys, k)
       return true, sum / k
    end
 end
-
---------------------------------------------------------------------------------
--- _determineEuclideanDistances
---------------------------------------------------------------------------------
 
 -- return 1D tensor such that result[i] = EuclideanDistance(xs[i], query)
 -- We require use of Euclidean distance so that this code will work.
@@ -192,39 +177,10 @@ function Knn:_determineEuclideanDistances(xs, query)
       return distances
 end
 
---------------------------------------------------------------------------------
--- _typeAndValueCheck
---------------------------------------------------------------------------------
-
 -- verify type and values of arguments
 function Knn:_typeAndValueCheck(xs, ys, k)
    -- type and value check xs
-   assert(xs,
-          'xs must be supplied')
-   assert(string.match(torch.typename(xs), 'torch%..*Tensor'),
-          'xs must be a Tensor')
-   assert(xs:dim() == 2,
-          'xs must be 2D Tensor')
-
-   -- type and value check ys
-   assert(ys,
-          'ys must be supplied')
-   if type(ys) == 'table' then
-      assert(#ys == xs:size(1), 
-             'number of ys must equal number of xs')
-   elseif string.match(torch.typename(ys), 'torch%..*Tensor') then
-      assert(ys:dim() == 1, 'ys must be a 1D Tensor')
-      assert(ys:size(1) == xs:size(1),
-             'number of ys must equal number of xs')
-   else
-      assert(false, 'ys must be an array or a 1D Tensor')
-   end
-   assert(ys[1],
-          'ys must be subscriptable by one value')
-
-   -- type and value check k
-   -- negative and zero values for k are detected when the average is 
-   -- computed
-   assert(type(k) == 'number',
-          'k must be a number')
+   affirm.isTensor2D(xs, 'xs')
+   affirm.isTensor1D(ys, 'ys')
+   affirm.isInteger(k, 'k')
 end
