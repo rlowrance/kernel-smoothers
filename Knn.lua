@@ -3,7 +3,7 @@
 
 require 'affirm'
 
--- examples
+-- API overview
 if false then
    local knn = Knn()
 
@@ -19,19 +19,18 @@ if false then
                                       useQueryPoint)
 end
 
--- create the class object
-local Knn = torch.class('Knn')
+--------------------------------------------------------------------------------
+-- CONSTRUCTION
+--------------------------------------------------------------------------------
 
------------------------------------------------------------------------------
--- intializer
------------------------------------------------------------------------------
+local Knn = torch.class('Knn')
 
 -- nothing to initialize
 function Knn:__init()
 end
 
 -----------------------------------------------------------------------------
--- estimate
+-- PUBLIC METHODS
 -----------------------------------------------------------------------------
 
 -- estimate y for a new query point using the Euclidean distance
@@ -58,10 +57,6 @@ function Knn:estimate(xs, ys, query, k)
    
    return self:_averageKNearest(distances, ys, k)
 end
-
------------------------------------------------------------------------------
--- smooth
------------------------------------------------------------------------------
 
 -- re-estimate y for an existing xs[queryIndex]
 -- ARGS:
@@ -177,7 +172,7 @@ function Knn:_determineEuclideanDistances(xs, query)
       return distances
 end
 
--- verify type and values of arguments
+-- verify type and values of certain arguments
 function Knn:_typeAndValueCheck(xs, ys, k)
    -- type and value check xs
    affirm.isTensor2D(xs, 'xs')
