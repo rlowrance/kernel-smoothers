@@ -112,7 +112,10 @@ function Knn:smooth(xs, ys, queryIndex, k, useQueryPoint)
 
 
    local v = makeVerbose(false, 'Knn:smooth')
+   local debug = true   -- zero value in sortedIndices
+
    v('queryIndex', queryIndex)
+   v('k', k)
    v('useQueryPoint', useQueryPoint)
 
    -- type check and value check the arguments
@@ -140,11 +143,23 @@ function Knn:smooth(xs, ys, queryIndex, k, useQueryPoint)
       -- hence this build and copy operation
       -- fit the values into 8 bits
       -- so use ByteTensor, whose values are unsigned 8 bit values
-      local effectiveMax = math.min(self.kmax, allDistances:size(1))
+      local effectiveMax = math.min(self.kmax, allSortedIndices:size(1))
       v('effectiveMax', effectiveMax)
-      sortedIndices = torch.ByteTensor(effectiveMax)
+      -- Need wide enough indices to hold the max number of observations
+      -- Max number of rows is about 1.5 million
+      -- So need a int, not a byte or short
+      sortedIndices = torch.IntTensor(effectiveMax):fill(0)
+      v('sortedIndices just created', sortedIndices)
       for i = 1, effectiveMax do
          sortedIndices[i] = allSortedIndices[i]
+         if debug and sortedIndices[i] ~= allSortedIndices[i] then
+            v('sortedIndices', sortedIndices)
+            error('not the same at i = ' .. tostring(i))
+         end
+         if debug and sortedIndices[i] == 0 then
+            v('sortedIndices', sortedIndices)
+            error('zero index at i = ' .. tostring(i))
+         end
       end
       self.cacheSortedIndices[queryIndex] = sortedIndices
       v('new sortedIndices', sortedIndices)
@@ -161,7 +176,6 @@ function Knn:smooth(xs, ys, queryIndex, k, useQueryPoint)
       v('sortedIndices after setting huge', sortedIndices)
    end
    
-   v('sortedIndices', sortedIndices)
    local ok, value = true, self:_averageKNearest(sortedIndices, 
                                                  ys, 
                                                  k, 
@@ -185,7 +199,10 @@ function Knn:_averageKNearest(sortedIndices, ys, k, useFirst)
    --                 if false, start with 2nd index in sortedIndiex
 
    local v = makeVerbose(false, 'Knn:_averageKNearest')
+   v('self', self)
    v('sortedIndices', sortedIndices)
+   v('k', k)
+   v('useFirst', useFirst)
    assert(k <= sortedIndices:size(1))
 
    -- sum the y values for the k nearest neighbors
@@ -197,6 +214,7 @@ function Knn:_averageKNearest(sortedIndices, ys, k, useFirst)
    local count = 0
 
    while (count < k) do
+      v('index', index)
       sum = sum + ys[sortedIndices[index]]
       count = count + 1
       index = index + 1

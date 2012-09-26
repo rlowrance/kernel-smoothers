@@ -143,12 +143,41 @@ function tests:testSmooth3()
       v('k', k)
       v('v', value)
       tester:assert(k == 1 or k == 2, 'what we queried')
-      tester:assert(torch.typename(value) == 'torch.ByteTensor', 
+      tester:assert(torch.typename(value) == 'torch.IntTensor', 
                     'expected type')
    end
 end
 
+function tests.bugZeroIndexValues()
+   -- sometimes a zero index value is generated in the cache
+   -- this cannot happen!
+   -- Hyp: the cache indices need to be 32 bits wide, not 8
+   local nObs = 300
+   local nDims = 3
+   local xs = torch.rand(nObs, nDims)
+   local ys = torch.rand(nObs)
+   local queryIndex = 290
+   local k = 10
+   local kmax = 11
+   local useQueryPoint = false
+
+   local knn = Knn(kmax)
+   -- following line should generate an error before bug is fixed
+   -- Since the test depends on random numbers used to initialize the xs,
+   -- It may not always fail
+   -- Hence run it 10 times
+   for time = 1, 10 do
+      local ok, estimate, cacheHit = knn:smooth(xs,
+                                                ys,
+                                                queryIndex,
+                                                k,
+                                                useQueryPoint)
+   end
+   tester:assert(true, 'got this far')
+end
+
 -- run unit tests
+--tester:add(tests.bugZeroIndexValues, 'test.bugZeroIndexValues')
 tester:add(tests)
 tester:run(true)  -- true ==> verbose
 
