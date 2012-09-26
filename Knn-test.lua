@@ -2,10 +2,12 @@
 -- unit tests for class Knn
 
 require 'Knn'
+require 'makeVerbose'
+require 'Tester'
 
 tests = {}
 
-tester = torch.Tester()
+tester = Tester()
 
 -- set global variables nsamples, ndims, xs, ys
 function makeExample()
@@ -23,44 +25,37 @@ function makeExample()
 end
 
 function tests.testEstimate()
+   --if true then return end
    makeExample()
    local query = torch.Tensor(ndims):zero()
    
    local expectedSum = 0
    for k = 1, 10 do
       expectedSum = expectedSum + ys[k]
-      local knn = Knn
+      local knn = Knn(255)
       local ok, actual = knn:estimate(xs, ys, query, k)
       tester:assert(ok, 'k=' .. k)
       local expected = expectedSum / k
       tester:asserteq(expected, actual, 'k=' .. k)
    end
-
-   -- test k = 0
-   local ok, message = Knn():estimate(xs, ys, query, 0)
-   tester:assert(not ok, 'k=0')
 end
 
 function smooth(queryIndex, k, useQuery)
    assert(queryIndex)
    assert(k)
    assert(useQuery ~= nil)
-   local knn = Knn()
+   local knn = Knn(255)
    local ok, value, hitCache = knn:smooth(xs, ys, queryIndex, k, useQuery)
-   if k == 0 then
-      tester:assert(not ok, 'k=' .. k)
-   else
-      tester:assert(ok, 'k=' .. k)
-   end
+   tester:assert(ok, 'k=' .. k)
    return value, hitCache
 end
 
 -- test smoothing without using the query point
 function tests:testSmooth1()
+   --if true then return end
    makeExample()
 
    local useQuery = false
-   smooth(1, 0, useQuery) -- should generate an error
    tester:asserteq(2,   smooth(1, 1, useQuery), 'nearest neighbors = [2]')
    tester:asserteq(2.5, smooth(1, 2, useQuery), 'nearest neighbors = [2,3]')
    tester:asserteq(3,   smooth(1, 3, useQuery), 'nearest neighbors = [2,3,4]')
@@ -94,8 +89,8 @@ end
 
 -- test whether smoothing using the cache
 function tests:testSmooth3()
-   local trace = false
-   if trace then print('\n') end
+   --if true then return end
+   local v, trace = makeVerbose(false, 'tests:testSmooth3')
 
    makeExample()
 
@@ -103,14 +98,14 @@ function tests:testSmooth3()
 
    -- first try: should get expected value and not use the cache
    local useQuery = true
-   local knn = Knn()
+   local knn = Knn(255)
 
    local function printCache(msg)
       if not trace then return end
-      print('cache', msg)
-      for k, v in pairs(knn.cache) do
-         print(k)
-         print(v)
+      v('cache', msg)
+      for k, v in pairs(knn.cacheSortedIndices) do
+         v('key', k)
+         v('value', v)
       end
    end
 
@@ -143,18 +138,19 @@ function tests:testSmooth3()
    tester:assert(hitCache, 'no cache on first probe')
    printCache('d')
  
-   local cache = knn.cache  -- don't do this in production code!
-   for k, v in pairs(cache) do
-      if trace then print (k, v) end
+   local cache = knn.cacheSortedIndices  -- don't do this in production code!
+   for k, value in pairs(cache) do
+      v('k', k)
+      v('v', value)
       tester:assert(k == 1 or k == 2, 'what we queried')
-      tester:assert(torch.typename(v) == 'torch.DoubleTensor', 'expected type')
+      tester:assert(torch.typename(value) == 'torch.ByteTensor', 
+                    'expected type')
    end
-   tester:asserteq(cache[2][2], 0, 'should be zero')
 end
 
 -- run unit tests
 tester:add(tests)
-tester:run()
+tester:run(true)  -- true ==> verbose
 
 
 
