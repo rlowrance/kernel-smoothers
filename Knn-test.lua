@@ -46,13 +46,13 @@ function smooth(queryIndex, k, useQuery)
    assert(k)
    assert(useQuery ~= nil)
    local knn = Knn()
-   local ok, value = knn:smooth(xs, ys, queryIndex, k, useQuery)
+   local ok, value, hitCache = knn:smooth(xs, ys, queryIndex, k, useQuery)
    if k == 0 then
       tester:assert(not ok, 'k=' .. k)
    else
       tester:assert(ok, 'k=' .. k)
    end
-   return value
+   return value, hitCache
 end
 
 -- test smoothing without using the query point
@@ -90,6 +90,66 @@ function tests:testSmooth2()
    tester:asserteq((55-10)/9, smooth(3, 9, useQuery), 
                    'nearest neighbors = [1,2,3,4,5,6,7,8,9]')
 
+end
+
+-- test whether smoothing using the cache
+function tests:testSmooth3()
+   local trace = false
+   if trace then print('\n') end
+
+   makeExample()
+
+   local useQuery = true
+
+   -- first try: should get expected value and not use the cache
+   local useQuery = true
+   local knn = Knn()
+
+   local function printCache(msg)
+      if not trace then return end
+      print('cache', msg)
+      for k, v in pairs(knn.cache) do
+         print(k)
+         print(v)
+      end
+   end
+
+   -- queryIndex == 1 k == 1
+   local ok, estimate, hitCache = knn:smooth(xs, ys, 1, 1, useQuery)
+   tester:assert(ok, 'works')
+   tester:asserteq(1, estimate, 'expected')
+   tester:assert(not hitCache, 'no cache on first probe')
+   printCache('a')
+
+   -- retry queryIndex == 1 k == 2
+   ok, estimate, hitCache = knn:smooth(xs, ys, 1, 2, useQuery)
+   tester:assert(ok, 'works')
+   tester:assert(1, estimate, 'expected')
+   tester:assert(hitCache, 'cache hit on second probe')
+   printCache('b')
+
+   -- queryIndex == 2 k == 1
+   useQuery = false
+   ok, estimate, hitCache = knn:smooth(xs, ys, 2, 1, useQuery)
+   tester:assert(ok, 'works')
+   tester:assert(1.5, estimate, 'expected')
+   tester:assert(not hitCache, 'no cache on first probe')
+   printCache('c')
+
+   -- queryIndex == 2 k == 1
+   ok, estimate, hitCache = knn:smooth(xs, ys, 2, 1, useQuery)
+   tester:assert(ok, 'works')
+   tester:assert(1.5, estimate, 'expected')
+   tester:assert(hitCache, 'no cache on first probe')
+   printCache('d')
+ 
+   local cache = knn.cache  -- don't do this in production code!
+   for k, v in pairs(cache) do
+      if trace then print (k, v) end
+      tester:assert(k == 1 or k == 2, 'what we queried')
+      tester:assert(torch.typename(v) == 'torch.DoubleTensor', 'expected type')
+   end
+   tester:asserteq(cache[2][2], 0, 'should be zero')
 end
 
 -- run unit tests

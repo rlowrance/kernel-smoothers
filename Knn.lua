@@ -2,6 +2,7 @@
 -- k nearest neighbors algorithm
 
 require 'affirm'
+require 'makeVerbose'
 
 -- API overview
 if false then
@@ -12,7 +13,7 @@ if false then
    -- ys are the targets
    local ok, estimate = Knn:estimate(xs, ys, query, k)
    if not ok then
-      handleError()
+      error(estimate)  -- in this case, estimate is a string
    end
 
    -- re-estimate xs[queryIndex] using k nearest neighbor
@@ -21,7 +22,7 @@ if false then
    local ok, smoothedEstimate = Knn:smooth(xs, ys, queryIndex, k,
                                            useQueryPoint)
    if not ok then 
-      handleError()
+      error(smoothedEstimate) -- smoothedEstimate is a string 
    end
 end -- API overview
 
@@ -31,30 +32,33 @@ end -- API overview
 
 local Knn = torch.class('Knn')
 
--- nothing to initialize
+-- maintain a cache of distances from each queryIndex to all other points
+-- this can speed up cross validation studies using the smooth method
 function Knn:__init()
-end
+   self.cache = {}
+end -- __init
 
 -----------------------------------------------------------------------------
 -- PUBLIC METHODS
 -----------------------------------------------------------------------------
 
--- estimate y for a new query point using the Euclidean distance
--- ARGS:
--- xs    : 2D Tensor
---         the i-th input sample is xs[i]
--- ys    : 1D Tensor or array of numbers
---         y[i] is the known value (target) of input sample xs[i]
---         number of ys must equal number of rows in xs
--- query : 1D Tensor
--- k     : number >= 1 
---          math.floor(k) neighbors are considered
--- RESULTS:
--- true, estimate : estimate is the estimate for the query
---                  estimate is a number
--- false, reason  : no estimate was produced
---                  rsult is a string
 function Knn:estimate(xs, ys, query, k)
+   -- estimate y for a new query point using the Euclidean distance
+   -- ARGS:
+   -- xs    : 2D Tensor
+   --         the i-th input sample is xs[i]
+   -- ys    : 1D Tensor or array of numbers
+   --         y[i] is the known value (target) of input sample xs[i]
+   --         number of ys must equal number of rows in xs
+   -- query : 1D Tensor
+   -- k     : number >= 1 
+   --          math.floor(k) neighbors are considered
+   -- RESULTS:
+   -- true, estimate : estimate is the estimate for the query
+   --                  estimate is a number
+   -- false, reason  : no estimate was produced
+   --                  rsult is a string
+   
    -- type check and value check the arguments
    self:_typeAndValueCheck(xs, ys, k)
    affirm.isTensor1D(ys, 'ys')
@@ -62,29 +66,37 @@ function Knn:estimate(xs, ys, query, k)
    local distances = self:_determineEuclideanDistances(xs, query)
    
    return self:_averageKNearest(distances, ys, k)
-end
+end -- estimate
 
--- re-estimate y for an existing xs[queryIndex]
--- ARGS:
--- xs            : 2D Tensor
---                 the i-th input sample is xs[i]
--- ys            : 1D Tensor or array of numbers
---                 y[i] is the known value (target) of input sample xs[i]
---                 number of ys must equal number of rows in xs 
--- queryIndex    : number >= 1
---                 xs[math.floor(queryIndex)] is re-estimated
--- k             : number >= 1 
---                 math.floor(k) neighbors are considered
--- useQueryPoint : boolean
---                if true, use the point at queryIndex as a neighbor
---                if false, don't
--- RESULTS:
--- true, estimate : estimate is the estimate for the query
---                  estimate is a number
--- false, reason  : no estimate was produced
---                  rsult is a string
 function Knn:smooth(xs, ys, queryIndex, k, useQueryPoint)
-   local trace = false
+   -- re-estimate y for an existing xs[queryIndex]
+   -- ARGS:
+   -- xs            : 2D Tensor
+   --                 the i-th input sample is xs[i]
+   -- ys            : 1D Tensor or array of numbers
+   --                 y[i] is the known value (target) of input sample xs[i]
+   --                 number of ys must equal number of rows in xs 
+   -- queryIndex    : number >= 1
+   --                 xs[math.floor(queryIndex)] is re-estimated
+   -- k             : number >= 1 
+   --                 math.floor(k) neighbors are considered
+   -- useQueryPoint : boolean
+   --                if true, use the point at queryIndex as a neighbor
+   --                if false, don't
+   -- RESULTS:
+   -- true, estimate, cacheHit : an estimate was produced
+   --                            estimate is a number
+   --                            cacheHit is true iff 
+   --                              queryIndex was in the cache so that the
+   --                              Euclidean distances were not computed
+   -- false, reason            : no estimate was produced
+   --                            reason is a string
+
+
+   local v = makeVerbose(false, 'Knn:smooth')
+   v('queryIndex', queryIndex)
+   v('useQueryPoint', useQueryPoint)
+
    -- type check and value check the arguments
    self:_typeAndValueCheck(xs, ys, k)
    affirm.isIntegerPositive(queryIndex, 'queryIndex')
@@ -93,30 +105,36 @@ function Knn:smooth(xs, ys, queryIndex, k, useQueryPoint)
    assert(queryIndex <= xs:size(1),
           'queryIndex cannot exceed number of samples = ' .. xs:size(1))
 
-   local distances = 
-      self:_determineEuclideanDistances(xs, xs[queryIndex])
+   local cacheHit = true
+   local distances = self.cache[queryIndex]
+   v('distances', distances)
+   if distances == nil then
+      cacheHit = false
+      distances = 
+         self:_determineEuclideanDistances(xs, xs[queryIndex])
+      self.cache[queryIndex] = distances
+      v('cache[queryIndex] just after it was created', self.cache[queryIndex])
+   end
    
    -- make the distance from the query index to itself large, if
    -- we are not using the query point as a neighbor
    if not useQueryPoint then
+      v('cache[queryIndex] before setting distances[queryIndex]', 
+        self.cache[queryIndex])
+      -- distances may be from the cache, in which case, we must clone
+      -- it since we don't want to modify the cache
+      -- This was very trick to find and debug
+      distances = distances:clone()  
       distances[queryIndex] = math.huge
+      v('cache[queryIndex] after setting distances[queryIndex]', 
+        self.cache[queryIndex])
+      v('distances after setting huge', distances)
    end
-
+   
    local ok, value = self:_averageKNearest(distances, ys, k)
 
-   if trace then
-      print('Knn:smooth')
-      print('xs\n', xs)
-      print('ys\n', ys)
-      print('queryIndex', queryIndex)
-      print('xs[math.floor(queryIndex)]', xs[math.floor(queryIndex)])
-      print('k', k)
-      print('ok', ok)
-      print('value', value)
-   end
-
-   return ok, value
-end
+   return ok, value, cacheHit
+end -- smooth
 
 --------------------------------------------------------------------------------
 -- PRIVATE METHODS
