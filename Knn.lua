@@ -36,16 +36,19 @@ local Knn = torch.class('Knn')
 
 -- maintain a cache of distances from each queryIndex to all other points
 -- this can speed up cross validation studies using the smooth method
-function Knn:__init(kmax)
+function Knn:__init(kmax, disableCache)
    affirm.isIntegerPositive(kmax, 'kmax')
-   assert(kmax < 256, 'kmax must fit into 8 unsigned bits')
+   -- leave one extra slot for when smoothing is done not use the queryIndex
+   assert(kmax <= 254, 'kmax + 1 must fit into 8 unsigned bits')
 
+   self.disableCache = disableCache or false
    self.kmax = kmax
    -- cache the kmax nearest sorted indices to queryIndex in
    -- self.cacheSortedIndices[queryIndex]
    -- NOTE: If the amount of RAM becomes a problem, a short int will suffices
    -- for the storage (or maybe even a byte if kmax <= 256)
    self.cacheSortedIndices = {}
+   
 end -- __init
 
 -----------------------------------------------------------------------------
@@ -131,7 +134,8 @@ function Knn:smooth(xs, ys, queryIndex, k, useQueryPoint)
    local cacheHit = true
    local sortedIndices = self.cacheSortedIndices[queryIndex]
    v('sortedIndices', sortedIndices)
-   if sortedIndices == nil then
+   if sortedIndices == nil or self.disableCache then
+      -- compute sortedIndices from first principles
       cacheHit = false
       allDistances = 
          self:_determineEuclideanDistances(xs, xs[queryIndex])
@@ -143,7 +147,7 @@ function Knn:smooth(xs, ys, queryIndex, k, useQueryPoint)
       -- hence this build and copy operation
       -- fit the values into 8 bits
       -- so use ByteTensor, whose values are unsigned 8 bit values
-      local effectiveMax = math.min(self.kmax, allSortedIndices:size(1))
+      local effectiveMax = math.min(self.kmax + 1, allSortedIndices:size(1))
       v('effectiveMax', effectiveMax)
       -- Need wide enough indices to hold the max number of observations
       -- Max number of rows is about 1.5 million
@@ -213,8 +217,9 @@ function Knn:_averageKNearest(sortedIndices, ys, k, useFirst)
 
    local count = 0
 
+   v('sortedIndices:size(1)', sortedIndices:size(1))
    while (count < k) do
-      v('index', index)
+      v('index,sortedIndices[index]', index, sortedIndices[index])
       sum = sum + ys[sortedIndices[index]]
       count = count + 1
       index = index + 1

@@ -1,9 +1,7 @@
 -- Knn-test.lua
 -- unit tests for class Knn
 
-require 'Knn'
-require 'makeVerbose'
-require 'Tester'
+require 'all'
 
 tests = {}
 
@@ -24,6 +22,73 @@ function makeExample()
    return nsamples, ndims, xs, ys
 end
 
+function tests.cache()
+   -- see if get same answer with and without cache
+   -- uses live data, so slow
+   local v = makeVerbose(false, 'tests.cache')
+
+   local log = Log('tmp')
+   local nObs, data = readTrainingData('../../data/',
+                                       log,
+                                       0,   -- no input limit
+                                       '1A')
+   local k = 15
+   local disableCache = true
+   local knnUseCache = Knn(k, not disableCache)
+   local knnNoCache = Knn(k, disableCache)
+   
+   -- test for few queryIndices
+   for queryIndex = 1, 10 do
+      local useQueryPoint = false
+
+      -- using the cache, but there is no entry at first
+      local ok, estimateUseCache1, cacheHit1 = 
+         knnUseCache:smooth(data.features,
+                            data.prices,
+                            queryIndex,
+                            k,
+                            useQueryPoint)
+      if not ok then
+         error(estimatedUseCache1)
+      end
+      tester:assert(not cacheHit1)
+
+      -- use the cache and hit the entry
+      local ok, estimateUseCache2, cacheHit2 =
+         knnUseCache:smooth(data.features,
+                            data.prices,
+                            queryIndex,
+                            k,
+                            useQueryPoint)
+       if not ok then
+          error(estimatedUseCache2)
+       end
+       tester:assert(cacheHit2)
+       v('estimateUseCache1', estimateUseCache1)
+       v('estimateUseCache2', estimateUseCache2)
+       tester:asserteq(estimateUseCache1, 
+                       estimateUseCache2, 
+                       'should be identical')
+       
+       -- don't use the cache
+       local ok, estimateNoCache, cacheHit =
+          knnNoCache:smooth(data.features,
+                            data.prices,
+                            queryIndex,
+                            k,
+                            useQueryPoint)
+
+       if not ok then
+          error(estimateNoCache)
+       end
+       tester:assert(not cacheHit)
+       v('estimateNoCache', estimateNoCache)
+       tester:asserteq(estimateUseCache1,
+                       estimateNoCache,
+                       'should be identical')
+   end -- loop of queryIndices
+end -- tests.cache   
+
 function tests.testEstimate()
    --if true then return end
    makeExample()
@@ -32,7 +97,7 @@ function tests.testEstimate()
    local expectedSum = 0
    for k = 1, 10 do
       expectedSum = expectedSum + ys[k]
-      local knn = Knn(255)
+      local knn = Knn(254)
       local ok, actual = knn:estimate(xs, ys, query, k)
       tester:assert(ok, 'k=' .. k)
       local expected = expectedSum / k
@@ -44,7 +109,7 @@ function smooth(queryIndex, k, useQuery)
    assert(queryIndex)
    assert(k)
    assert(useQuery ~= nil)
-   local knn = Knn(255)
+   local knn = Knn(254)
    local ok, value, hitCache = knn:smooth(xs, ys, queryIndex, k, useQuery)
    tester:assert(ok, 'k=' .. k)
    return value, hitCache
@@ -98,7 +163,7 @@ function tests:testSmooth3()
 
    -- first try: should get expected value and not use the cache
    local useQuery = true
-   local knn = Knn(255)
+   local knn = Knn(254)
 
    local function printCache(msg)
       if not trace then return end
