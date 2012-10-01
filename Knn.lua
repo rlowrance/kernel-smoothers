@@ -6,22 +6,26 @@ require 'makeVerbose'
 
 -- API overview
 if false then
+   -- xs are the inputs, a 2D Tensor
+   -- ys are the targets, a 1D Tensor
    -- kmax is the maximum value of k that will be used
-   -- it effects the cache size used by the smooth method
-   local knn = Knn(kmax)
+   --      it effects the cache size used by the smooth method
+   local knn = Knn(xs, ys, kmax)
+
+   -- attributes
+   modelXs = knn.xs   -- xs from construction
+   modelYs = knn.ys   -- ys from construction
 
    -- average of k nearest neighbors using Euclidean distance in xs to query
-   -- xs are the inputs
-   -- ys are the targets
-   local ok, estimate = knn:estimate(xs, ys, query, k)
+   local ok, estimate = knn:estimate(query, k)
    if not ok then
       error(estimate)  -- in this case, estimate is a string
    end
 
    -- re-estimate xs[queryIndex] using k nearest neighbor
-   -- exclude ys[queryIndex] from this estimate
+   -- maybe exclude ys[queryIndex] from this estimate
    local useQueryPoint = false
-   local ok, smoothedEstimate, cacheHit = knn:smooth(xs, ys, queryIndex, k,
+   local ok, smoothedEstimate, cacheHit = knn:smooth(queryIndex, k,
                                                      useQueryPoint)
    if not ok then 
       error(smoothedEstimate) -- smoothedEstimate is a string 
@@ -36,18 +40,52 @@ local Knn = torch.class('Knn')
 
 -- maintain a cache of distances from each queryIndex to all other points
 -- this can speed up cross validation studies using the smooth method
-function Knn:__init(kmax, disableCache)
-   affirm.isIntegerPositive(kmax, 'kmax')
-   -- leave one extra slot for when smoothing is done not use the queryIndex
-   assert(kmax <= 254, 'kmax + 1 must fit into 8 unsigned bits')
+function Knn:__init(xs, ys, kmax, enableCache) 
+   -- ARGS:
+   -- xs            : 2D Tensor
+   --                 the i-th input sample is xs[i]
+   -- ys            : 1D Tensor or array of numbers
+   --                 y[i] is the known value (target) of input sample xs[i]
+   --                 number of ys must equal number of rows in xs 
+   -- kmax          : integer > 0, maximum k value that we will see
+   --                 used in the cache
+   --                 must be in interval [1,254]
+   -- enableCache   : optional boolean, default true
+   --                 for debugging, the cache can be turned off
 
-   self.disableCache = disableCache or false
+   local v = makeVerbose(false, 'Knn:__init')
+
+   -- type and value check arguments
+   affirm.isTensor2D(xs, 'xs')
+   affirm.isTensor1D(ys, 'ys')
+   affirm.isIntegerPositive(kmax, 'kmax')
+
+   if enableCache == nil then
+      self.enableCache = true
+   else
+      affirm.isBoolean(enableCache, 'enableCache')
+      self.enableCache = enableCache
+   end
+
+   self.xs = xs
+   self.ys = ys
    self.kmax = kmax
    -- cache the kmax nearest sorted indices to queryIndex in
-   -- self.cacheSortedIndices[queryIndex]
-   -- NOTE: If the amount of RAM becomes a problem, a short int will suffices
-   -- for the storage (or maybe even a byte if kmax <= 256)
-   self.cacheSortedIndices = {}
+   -- key = an index into the xs, the queryIndex in a call to method smooth
+   -- value = a 1D IntTensor of size kmax + 1, containing the indices
+   --         of the kmax +1 closest neighbors to the key
+   self.cache = {}
+
+   -- check that the IntTensor value can hold an index for all the xs
+   v('kmax', kmax)
+   v('xs:size(1)', xs:size(1))
+   assert((2^31 - 1) > xs:size(1),
+          'xs has too many rows for current implementation')
+
+   -- check that we have enough observations to have kmax neighbors
+   assert(kmax + 1 <= xs:size(1),
+          string.format('\nkmax (=%d) + 1 exceeds nObs=xs:size(1) (=%d)',
+                        kmax, xs:size(1)))
    
 end -- __init
 
@@ -55,14 +93,9 @@ end -- __init
 -- PUBLIC METHODS
 -----------------------------------------------------------------------------
 
-function Knn:estimate(xs, ys, query, k)
+function Knn:estimate(query, k)
    -- estimate y for a new query point using the Euclidean distance
    -- ARGS:
-   -- xs    : 2D Tensor
-   --         the i-th input sample is xs[i]
-   -- ys    : 1D Tensor or array of numbers
-   --         y[i] is the known value (target) of input sample xs[i]
-   --         number of ys must equal number of rows in xs
    -- query : 1D Tensor
    -- k     : number >= 1 
    --          math.floor(k) neighbors are considered
@@ -76,27 +109,21 @@ function Knn:estimate(xs, ys, query, k)
    -- for consistency, its included here.
    
    -- type check and value check the arguments
-   self:_typeAndValueCheck(xs, ys, k)
-   affirm.isTensor1D(ys, 'ys')
+   affirm.isTensor1D(query)
+   affirm.isIntegerPositive(k)
 
-   local distances = self:_determineEuclideanDistances(xs, query)
+   local distances = self:_euclideanDistances(query)
    local _, sortedIndices = torch.sort(distances)
    
    local useFirstIndex = true
    return true, self:_averageKNearest(sortedIndices, 
-                                      ys, 
                                       k,
                                       useFirstIndex)
 end -- estimate
 
-function Knn:smooth(xs, ys, queryIndex, k, useQueryPoint)
+function Knn:smooth(queryIndex, k, useQueryPoint)
    -- re-estimate y for an existing xs[queryIndex]
    -- ARGS:
-   -- xs            : 2D Tensor
-   --                 the i-th input sample is xs[i]
-   -- ys            : 1D Tensor or array of numbers
-   --                 y[i] is the known value (target) of input sample xs[i]
-   --                 number of ys must equal number of rows in xs 
    -- queryIndex    : number >= 1
    --                 xs[math.floor(queryIndex)] is re-estimated
    -- k             : number >= 1 
@@ -115,76 +142,39 @@ function Knn:smooth(xs, ys, queryIndex, k, useQueryPoint)
 
 
    local v = makeVerbose(false, 'Knn:smooth')
-   local debug = true   -- zero value in sortedIndices
 
    v('queryIndex', queryIndex)
    v('k', k)
    v('useQueryPoint', useQueryPoint)
 
-   -- type check and value check the arguments
-   self:_typeAndValueCheck(xs, ys, k)
+   -- type and value check the arguments
    affirm.isIntegerPositive(queryIndex, 'queryIndex')
+   affirm.isIntegerPositive(k, 'k')
    affirm.isBoolean(useQueryPoint, 'useQueryPoint')
 
-   assert(queryIndex <= xs:size(1),
-          'queryIndex cannot exceed number of samples = ' .. xs:size(1))
+   assert(queryIndex <= self.xs:size(1),
+          'queryIndex cannot exceed number of samples = ' .. self.xs:size(1))
 
    assert(k <= self.kmax, 'k exceeds kmax set at construction time')
 
    local cacheHit = true
-   local sortedIndices = self.cacheSortedIndices[queryIndex]
-   v('sortedIndices', sortedIndices)
-   if sortedIndices == nil or self.disableCache then
+   local sortedIndices = self.cache[queryIndex]
+   if sortedIndices == nil or not self.enableCache then
       -- compute sortedIndices from first principles
+      v('computing sortedIndices')
       cacheHit = false
-      allDistances = 
-         self:_determineEuclideanDistances(xs, xs[queryIndex])
-      v('allDistances', allDistances)
-      local _, allSortedIndices = torch.sort(allDistances)
-      v('allSortedIndices', allSortedIndices)
-      -- simply resizing via allSortedDistances:resize(kmax) does not shrink
-      -- the underlying storage
-      -- hence this build and copy operation
-      -- fit the values into 8 bits
-      -- so use ByteTensor, whose values are unsigned 8 bit values
-      local effectiveMax = math.min(self.kmax + 1, allSortedIndices:size(1))
-      v('effectiveMax', effectiveMax)
-      -- Need wide enough indices to hold the max number of observations
-      -- Max number of rows is about 1.5 million
-      -- So need a int, not a byte or short
-      sortedIndices = torch.IntTensor(effectiveMax):fill(0)
-      v('sortedIndices just created', sortedIndices)
-      for i = 1, effectiveMax do
-         sortedIndices[i] = allSortedIndices[i]
-         if debug and sortedIndices[i] ~= allSortedIndices[i] then
-            v('sortedIndices', sortedIndices)
-            error('not the same at i = ' .. tostring(i))
-         end
-         if debug and sortedIndices[i] == 0 then
-            v('sortedIndices', sortedIndices)
-            error('zero index at i = ' .. tostring(i))
-         end
-      end
-      self.cacheSortedIndices[queryIndex] = sortedIndices
-      v('new sortedIndices', sortedIndices)
+      sortedIndices = self:_makeSortedIndices(queryIndex)
+      self.cache[queryIndex] = sortedIndices
    end
-   
-   -- make the distance from the query index to itself large, if
-   -- we are not using the query point as a neighbor
-   if false and not useQueryPoint then
-      -- sortedIndices may be from the cache, in which case, we must clone
-      -- it, since we don't want to modify the cache
-      -- This was very trick to find and debug
-      sortedIndices = sortedIndices:clone()  
-      sortedIndices[1] = math.huge  -- the queryIndex must be first
-      v('sortedIndices after setting huge', sortedIndices)
-   end
+   v('sortedIndices', sortedIndices)
    
    local ok, value = true, self:_averageKNearest(sortedIndices, 
-                                                 ys, 
                                                  k, 
                                                  useQueryPoint)
 
+   v('result ok', ok)
+   v('result value', value)
+   v('result cacheHit', cacheHit)
    return ok, value, cacheHit
 end -- smooth
 
@@ -192,22 +182,25 @@ end -- smooth
 -- PRIVATE METHODS
 --------------------------------------------------------------------------------
 
-function Knn:_averageKNearest(sortedIndices, ys, k, useFirst)
+function Knn:_averageKNearest(sortedIndices, k, useFirst)
    -- return average of the k nearest samples
    -- ARGS
    -- sortedIndices : 1D Tensor with indices of neighbors, closest to furthest
-   -- ys            : 1D Tensor of prices
    -- k             : Integer > 0, how many neighbors to consider
    -- useFirst      : boolean
    --                 if true, start with 1st index in sortedIndices
    --                 if false, start with 2nd index in sortedIndiex
 
    local v = makeVerbose(false, 'Knn:_averageKNearest')
+   affirm.isTensor1D(sortedIndices, 'sortedIndices')
+   affirm.isIntegerPositive(k, 'k')
+   affirm.isBoolean(useFirst, 'useFirst')
+
    v('self', self)
    v('sortedIndices', sortedIndices)
    v('k', k)
    v('useFirst', useFirst)
-   assert(k <= sortedIndices:size(1))
+   assert(k + 1 <= sortedIndices:size(1))
 
    -- sum the y values for the k nearest neighbors
    local sum = 0
@@ -220,46 +213,69 @@ function Knn:_averageKNearest(sortedIndices, ys, k, useFirst)
    v('sortedIndices:size(1)', sortedIndices:size(1))
    while (count < k) do
       v('index,sortedIndices[index]', index, sortedIndices[index])
-      sum = sum + ys[sortedIndices[index]]
+      sum = sum + self.ys[sortedIndices[index]]
       count = count + 1
       index = index + 1
    end
 
    return sum / k
-end
+end -- _averageKNearest
 
-function Knn:_determineEuclideanDistances(xs, query)
+function Knn:_euclideanDistances(query)
    -- return 1D tensor such that result[i] = EuclideanDistance(xs[i], query)
    -- We require use of Euclidean distance so that this code will work.
    -- It computes all the distances from the query point at once
    -- using Clement Farabet's idea to speed up the computation.
 
-   local v = makeVerbose(false, 'Knn:_determineEuclideanDistances')
+   local v, trace = makeVerbose(false, 'Knn:_euclideanDistances')
+   local debug = false
+   v('self', self)
+   v('query', query)
+   if debug and trace then 
+      for i = 1, query:size(1) do
+         print(string.format('query[%d] = %f', i, query[i]))
+      end
+   end
+   affirm.isTensor1D(query, 'query')
 
    query = query:clone()  -- in case the query is a view of the xs storage
    
    -- create a 2D Tensor where each row is the query
    -- This construction is space efficient relative to replicating query
    -- queries[i] == query for all i in range
-   -- Thanks Clement!
+   -- Thanks Clement Farabet!
    local queries = 
       torch.Tensor(query:storage(),
-                   1,               -- offset
-                   xs:size(1), 0,   -- row index offset and stride
-                   xs:size(2), 1)   -- col index offset and stride
+                   1,                    -- offset
+                   self.xs:size(1), 0,   -- row index offset and stride
+                   self.xs:size(2), 1)   -- col index offset and stride
       
-      local distances = torch.add(queries, -1 , xs) -- queries - xs
-      distances:cmul(distances)                     -- (queries - xs)^2
-      distances = torch.sum(distances, 2):squeeze() -- \sum (queries - xs)^2
-      distances = distances:sqrt()                  -- Euclidean distances
-      
-      return distances
-end
+   local distances = torch.add(queries, -1 , self.xs) -- queries - xs
+   distances:cmul(distances)                          -- (queries - xs)^2
+   distances = torch.sum(distances, 2):squeeze() -- \sum (queries - xs)^2
+   distances = distances:sqrt()                  -- Euclidean distances
+  
+   v('distances', distances)
+   return distances
+end -- _euclideanDistances
 
--- verify type and values of certain arguments
-function Knn:_typeAndValueCheck(xs, ys, k)
-   -- type and value check xs
-   affirm.isTensor2D(xs, 'xs')
-   affirm.isTensor1D(ys, 'ys')
-   affirm.isIntegerPositive(k, 'k')
-end
+function Knn:_makeSortedIndices(queryIndex)
+   -- return 1D IntTensor of sorted distances from xs[queryIndex] to kmax + 1
+   -- nearest neighbors
+   local v = makeVerbose(false, 'Knn:_makeSortedIndices')
+   affirm.isIntegerPositive(queryIndex, 'queryIndex')
+
+   local allDistances = self:_euclideanDistances(self.xs[queryIndex])
+   v('allDistances', allDistances)
+   local _, allSortedIndices = torch.sort(allDistances)
+   v('allSortedIndices', allSortedIndices)
+   -- simply resizing via allSortedDistances:resize(kmax) does not shrink
+   -- the underlying storage
+   -- hence this build and copy operation
+   local sortedIndices = torch.IntTensor(self.kmax + 1):fill(0)
+   for i = 1, self.kmax + 1 do
+      sortedIndices[i] = allSortedIndices[i]
+   end
+   v('sortedIndices', sortedIndices)
+   return sortedIndices
+end -- _makeSortedIndices
