@@ -21,8 +21,32 @@ function makeExample()
    return nsamples, ndims, xs, ys
 end -- makeExample
 
+function tests.seeNeighbors()
+   -- check on neighbor indices returned from method smooth
+   --if true then return end
+   local v = makeVerbose(false, 'tests.seeNeighbors')
+   local nSamples, nDims, xs, ys = makeExample()
+   local kmax = 3
+   local knn = Knn(xs, ys, kmax)
+   local queryIndex = 3
+   local k = 3
+   local useQueryPoint = true
+   local ok, estimate, cacheHit, nearestIndices = 
+      knn:smooth(queryIndex, k, useQueryPoint)
+   tester:assert(ok)
+   tester:assert(estimate == 3)
+   tester:assert(not cacheHit)
+
+   v('nearestIndices', nearestIndices)
+   tester:assert(check.isTensor1D(nearestIndices))
+   tester:asserteq(3, nearestIndices[1])
+   tester:assert(2 == nearestIndices[2] or 4 == nearestIndices[2])
+   tester:assert(2 == nearestIndices[3] or 4 == nearestIndices[3])
+end -- tests.seeNeighbors
+   
+
 function tests._euclideanDistances()
-   local v = makeVerbose(true, 'tests._euclideanDistance')
+   local v = makeVerbose(false, 'tests._euclideanDistance')
    xs = torch.Tensor(2,3):fill(0)
    xs[2][2] = 0.2
    v('xs', xs)

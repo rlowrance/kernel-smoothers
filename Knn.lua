@@ -25,10 +25,10 @@ if false then
    -- re-estimate xs[queryIndex] using k nearest neighbor
    -- maybe exclude ys[queryIndex] from this estimate
    local useQueryPoint = false
-   local ok, smoothedEstimate, cacheHit = knn:smooth(queryIndex, k,
-                                                     useQueryPoint)
+   local ok, smoothedEstimate, cacheHit, sortedIndices = 
+      knn:smooth(queryIndex, k, useQueryPoint)
    if not ok then 
-      error(smoothedEstimate) -- smoothedEstimate is a string 
+      error(smoothedEstimate) -- smoothedEstimate is a string in this case
    end
 end -- API overview
 
@@ -132,14 +132,14 @@ function Knn:smooth(queryIndex, k, useQueryPoint)
    --                if true, use the point at queryIndex as a neighbor
    --                if false, don't
    -- RESULTS:
-   -- true, estimate, cacheHit : an estimate was produced
-   --                            estimate is a number
-   --                            cacheHit is true iff 
-   --                              queryIndex was in the cache so that the
-   --                              Euclidean distances were not computed
-   -- false, reason            : no estimate was produced
-   --                            reason is a string
-
+   -- true, estimate, cacheHit, sortedIndices : an estimate was produced
+   --   estimate     : number, the estimate value at the queryIndex
+   --   cacheHit     : boolean, is true iff queryIndex was in the cache
+   --                  so that the Euclidean distances were not computed
+   --   sortedIndics : sequence of indices in xs that were neighbors of the
+   --                  queryIndex in nearest to furthest order
+   -- false, reason : no estimate was produced
+   --   reason        : string explaining the reason
 
    local v = makeVerbose(false, 'Knn:smooth')
 
@@ -175,7 +175,7 @@ function Knn:smooth(queryIndex, k, useQueryPoint)
    v('result ok', ok)
    v('result value', value)
    v('result cacheHit', cacheHit)
-   return ok, value, cacheHit
+   return ok, value, cacheHit, sortedIndices
 end -- smooth
 
 --------------------------------------------------------------------------------
