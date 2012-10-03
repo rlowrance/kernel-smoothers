@@ -21,6 +21,7 @@ function makeExample()
    return nsamples, ndims, xs, ys
 end -- makeExample
 
+
 function tests.seeNeighbors()
    -- check on neighbor indices returned from method smooth
    --if true then return end
@@ -62,7 +63,28 @@ function tests._euclideanDistances()
 end -- tests._euclideanDistance
 
 
-function tests.cache()
+function tests.cacheEstimate()
+   local v = makeVerbose(true, 'tests.cacheEstimate')
+
+   local nSamples, nDims, xs, ys = makeExample()
+   local kmax = 3
+   local enableCache = true
+   local knn = Knn(xs, ys, kmax, enableCache)
+   
+   local k = 2
+   local ok, estimate, cacheHit = knn:estimate(xs[1], k)
+   tester:assert(ok)
+   tester:asserteq(1.5, estimate)
+   tester:assert(cacheHit == false)
+
+   local ok, estimate, cacheHit = knn:estimate(xs[1], k)
+   tester:assert(ok)
+   tester:asserteq(1.5, estimate)
+   tester:assert(cacheHit == true)
+
+end -- tests.cacheEstimate
+
+function tests.cacheSmooth()
    if false then
       print('STUB')
       return
@@ -257,7 +279,7 @@ function tests:testSmooth3()
    tester:assert(hitCache, 'no cache on first probe')
    printCache('d')
  
-   local cache = knn.cache  -- don't do this in production code!
+   local cache = knn._cacheSmooth  -- don't do this in production code!
    v('knn', knn)
    v('cache', cache)
    for k, value in pairs(cache) do

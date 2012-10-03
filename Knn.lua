@@ -10,14 +10,14 @@ if false then
    -- ys are the targets, a 1D Tensor
    -- kmax is the maximum value of k that will be used
    --      it effects the cache size used by the smooth method
-   local knn = Knn(xs, ys, kmax)
+   local knn = Knn(xs, ys, kmax, enableCache)
 
    -- attributes
    modelXs = knn.xs   -- xs from construction
    modelYs = knn.ys   -- ys from construction
 
    -- average of k nearest neighbors using Euclidean distance in xs to query
-   local ok, estimate = knn:estimate(query, k)
+   local ok, estimate, cacheHit = knn:estimate(query, k)
    if not ok then
       error(estimate)  -- in this case, estimate is a string
    end
@@ -25,10 +25,9 @@ if false then
    -- re-estimate xs[queryIndex] using k nearest neighbor
    -- maybe exclude ys[queryIndex] from this estimate
    local useQueryPoint = false
-   local ok, smoothedEstimate, cacheHit, sortedIndices = 
-      knn:smooth(queryIndex, k, useQueryPoint)
+   local ok, estimate, cacheHit = knn:smooth(queryIndex, k, useQueryPoint)
    if not ok then 
-      error(smoothedEstimate) -- smoothedEstimate is a string in this case
+      error(estimate) -- estimate is a string in this case
    end
 end -- API overview
 
@@ -61,20 +60,29 @@ function Knn:__init(xs, ys, kmax, enableCache)
    affirm.isIntegerPositive(kmax, 'kmax')
 
    if enableCache == nil then
-      self.enableCache = true
+      self._enableCache = true
    else
       affirm.isBoolean(enableCache, 'enableCache')
-      self.enableCache = enableCache
+      self._enableCache = enableCache
    end
 
-   self.xs = xs
-   self.ys = ys
-   self.kmax = kmax
+   self._xs = xs
+   self._ys = ys
+   self._kmax = kmax
+
+   -- cache nearest sorted indices to a query
+   -- used only in the estimate method
+   -- key = tostring(query)
+   -- value = 1D IntTensor of size kmax + 1 containing the indicies
+   --         of the kmax + 1 closest neighbors to the query
+   self._cacheEstimate = {}
+
    -- cache the kmax nearest sorted indices to queryIndex in
+   -- used only in the smooth method
    -- key = an index into the xs, the queryIndex in a call to method smooth
    -- value = a 1D IntTensor of size kmax + 1, containing the indices
    --         of the kmax +1 closest neighbors to the key
-   self.cache = {}
+   self._cacheSmooth = {}
 
    -- check that the IntTensor value can hold an index for all the xs
    v('kmax', kmax)
@@ -107,18 +115,52 @@ function Knn:estimate(query, k)
    -- NOTE: the status result is not really needed for this implemenation
    -- of Knn. However, other kernel-smoothers in this package need it, so
    -- for consistency, its included here.
-   
-   -- type check and value check the arguments
-   affirm.isTensor1D(query)
-   affirm.isIntegerPositive(k)
 
-   local distances = self:_euclideanDistances(query)
-   local _, sortedIndices = torch.sort(distances)
-   
+   local v = makeVerbose(false, 'Knn:estimate')
+   v('query', query)
+   v('k', k)
+
+   -- type check and value check the arguments
+   affirm.isTensor1D(query, 'query')
+   affirm.isIntegerPositive(k, 'k')
+
+   function determineSortedIndices()
+      -- return sorted indices
+      local v = makeVerbose(false, 'determineSortedIndices')
+      v('query', query)
+      local distances = self:_euclideanDistances(query)
+      local _, allSortedIndices = torch.sort(distances)
+      local sortedIndices = self:_resizeAllSortedIndices(allSortedIndices)
+      v('sortedIndices', sortedIndices)
+      return sortedIndices
+   end -- determineSortedIndices
+
+   local cacheHit = nil
+   local sortedIndices = nil
+   if self._enableCache then
+      local queryString = tostring(query)
+      sortedIndices = self._cacheEstimate[queryString]
+      if sortedIndices == nil then
+         v('computing sortedIndices')
+         cacheHit = false
+         sortedIndices = determineSortedIndices()
+         self._cacheEstimate[queryString] = sortedIndices
+      else
+         cacheHit = true
+      end
+   else
+      sortedIndices = determineSortedIndices()
+   end
+      
+   v('sortedIndices', sortedIndices)
+         
    local useFirstIndex = true
-   return true, self:_averageKNearest(sortedIndices, 
-                                      k,
-                                      useFirstIndex)
+   return 
+      true, 
+       self:_averageKNearest(sortedIndices, 
+                             k,
+                             useFirstIndex),
+       cacheHit
 end -- estimate
 
 function Knn:smooth(queryIndex, k, useQueryPoint)
@@ -134,10 +176,15 @@ function Knn:smooth(queryIndex, k, useQueryPoint)
    -- RESULTS:
    -- true, estimate, cacheHit, sortedIndices : an estimate was produced
    --   estimate     : number, the estimate value at the queryIndex
-   --   cacheHit     : boolean, is true iff queryIndex was in the cache
-   --                  so that the Euclidean distances were not computed
-   --   sortedIndics : sequence of indices in xs that were neighbors of the
+   --   cacheHit     : tri-values, is true iff queryIndex was in the cache
+   --                  if nil, the cache was not enabled
+   --                  if true, the cache was enabled and the query was found 
+   --                     in it
+   --                  if false, the cache was enabled and the query was not
+   --                     found in it
+   --   sortedIndics : 1D Tensor of indices in xs that were neighbors of the
    --                  queryIndex in nearest to furthest order
+   --                  the queryIndex itself is among the closest neighbors
    -- false, reason : no estimate was produced
    --   reason        : string explaining the reason
 
@@ -152,19 +199,19 @@ function Knn:smooth(queryIndex, k, useQueryPoint)
    affirm.isIntegerPositive(k, 'k')
    affirm.isBoolean(useQueryPoint, 'useQueryPoint')
 
-   assert(queryIndex <= self.xs:size(1),
-          'queryIndex cannot exceed number of samples = ' .. self.xs:size(1))
+   assert(queryIndex <= self._xs:size(1),
+          'queryIndex cannot exceed number of samples = ' .. self._xs:size(1))
 
-   assert(k <= self.kmax, 'k exceeds kmax set at construction time')
+   assert(k <= self._kmax, 'k exceeds kmax set at construction time')
 
    local cacheHit = true
-   local sortedIndices = self.cache[queryIndex]
-   if sortedIndices == nil or not self.enableCache then
+   local sortedIndices = self._cacheSmooth[queryIndex]
+   if sortedIndices == nil or not self._enableCache then
       -- compute sortedIndices from first principles
       v('computing sortedIndices')
       cacheHit = false
       sortedIndices = self:_makeSortedIndices(queryIndex)
-      self.cache[queryIndex] = sortedIndices
+      self._cacheSmooth[queryIndex] = sortedIndices
    end
    v('sortedIndices', sortedIndices)
    
@@ -213,7 +260,7 @@ function Knn:_averageKNearest(sortedIndices, k, useFirst)
    v('sortedIndices:size(1)', sortedIndices:size(1))
    while (count < k) do
       v('index,sortedIndices[index]', index, sortedIndices[index])
-      sum = sum + self.ys[sortedIndices[index]]
+      sum = sum + self._ys[sortedIndices[index]]
       count = count + 1
       index = index + 1
    end
@@ -247,10 +294,10 @@ function Knn:_euclideanDistances(query)
    local queries = 
       torch.Tensor(query:storage(),
                    1,                    -- offset
-                   self.xs:size(1), 0,   -- row index offset and stride
-                   self.xs:size(2), 1)   -- col index offset and stride
+                   self._xs:size(1), 0,   -- row index offset and stride
+                   self._xs:size(2), 1)   -- col index offset and stride
       
-   local distances = torch.add(queries, -1 , self.xs) -- queries - xs
+   local distances = torch.add(queries, -1 , self._xs) -- queries - xs
    distances:cmul(distances)                          -- (queries - xs)^2
    distances = torch.sum(distances, 2):squeeze() -- \sum (queries - xs)^2
    distances = distances:sqrt()                  -- Euclidean distances
@@ -265,17 +312,25 @@ function Knn:_makeSortedIndices(queryIndex)
    local v = makeVerbose(false, 'Knn:_makeSortedIndices')
    affirm.isIntegerPositive(queryIndex, 'queryIndex')
 
-   local allDistances = self:_euclideanDistances(self.xs[queryIndex])
+   local allDistances = self:_euclideanDistances(self._xs[queryIndex])
    v('allDistances', allDistances)
    local _, allSortedIndices = torch.sort(allDistances)
    v('allSortedIndices', allSortedIndices)
+   sortedIndices = self:_resizeAllSortedIndices(allSortedIndices)
+   v('sortedIndices', sortedIndices)
+   return sortedIndices
+end -- _makeSortedIndices
+
+function Knn:_resizeAllSortedIndices(allSortedIndices)
+   -- return new 1D Tensor with first kmax + 1 elements
    -- simply resizing via allSortedDistances:resize(kmax) does not shrink
    -- the underlying storage
    -- hence this build and copy operation
-   local sortedIndices = torch.IntTensor(self.kmax + 1):fill(0)
-   for i = 1, self.kmax + 1 do
+   local v = makeVerbose(false, 'Knn:_resizeAllSortedIndices')
+   local sortedIndices = torch.IntTensor(self._kmax + 1):fill(0)
+   for i = 1, self._kmax + 1 do
       sortedIndices[i] = allSortedIndices[i]
    end
    v('sortedIndices', sortedIndices)
    return sortedIndices
-end -- _makeSortedIndices
+end -- _resizeAllSortedIndices
