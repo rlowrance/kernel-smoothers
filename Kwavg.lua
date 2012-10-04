@@ -40,7 +40,7 @@ function Kwavg:__init(xs, ys, kernelName)
    affirm.isString(kernelName, 'kernelName')
 
    assert(kernelName == 'epanechnikov quadratic',
-          'for now, only kernel support is epanechnikov quadratic')
+          'for now, only kernel supported is epanechnikov quadratic')
    self._xs = xs
    self._ys = ys
    self._kernelName = kernelName
