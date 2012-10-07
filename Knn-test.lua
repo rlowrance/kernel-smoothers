@@ -23,12 +23,13 @@ end -- makeExample
 
 
 function tests.seeNeighbors()
+   if true then return end
    -- check on neighbor indices returned from method smooth
    --if true then return end
    local v = makeVerbose(false, 'tests.seeNeighbors')
    local nSamples, nDims, xs, ys = makeExample()
-   local kmax = 3
-   local knn = Knn(xs, ys, kmax)
+   local enableCache = true
+   local knn = Knn(xs, ys, not enableCache)
    local queryIndex = 3
    local k = 3
    local useQueryPoint = true
@@ -46,45 +47,30 @@ function tests.seeNeighbors()
 end -- tests.seeNeighbors
    
 
-function tests._euclideanDistances()
-   local v = makeVerbose(false, 'tests._euclideanDistance')
-   xs = torch.Tensor(2,3):fill(0)
-   xs[2][2] = 0.2
-   v('xs', xs)
-   local ys = torch.Tensor(2):fill(1)
-   local kmax = 1
-   local knn = Knn(xs, ys, 1)
-   local query = torch.Tensor(3):fill(0)
-   v('query', query)
-   local distances = knn:_euclideanDistances(query)
-   v('distances', distances)
-   tester:asserteq(0, distances[1])
-   tester:asserteq(0.2, distances[2])
-end -- tests._euclideanDistance
-
-
 function tests.cacheEstimate()
    local v = makeVerbose(true, 'tests.cacheEstimate')
 
    local nSamples, nDims, xs, ys = makeExample()
    local kmax = 3
    local enableCache = true
-   local knn = Knn(xs, ys, kmax, enableCache)
+   local knn = Knn(xs, ys, enableCache)
    
    local k = 2
-   local ok, estimate, cacheHit = knn:estimate(xs[1], k)
+   local ok, estimate = knn:estimate(xs[1], k)
    tester:assert(ok)
    tester:asserteq(1.5, estimate)
-   tester:assert(cacheHit == false)
 
-   local ok, estimate, cacheHit = knn:estimate(xs[1], k)
+   local ok, estimate = knn:estimate(xs[1], k)
    tester:assert(ok)
    tester:asserteq(1.5, estimate)
-   tester:assert(cacheHit == true)
 
 end -- tests.cacheEstimate
 
 function tests.cacheSmooth()
+   if true then 
+      -- skip tests of method smooth which is deprecated
+      return 
+   end
    if false then
       print('STUB')
       return
@@ -170,6 +156,10 @@ function tests.testEstimate()
 end
 
 function smoothOLD(queryIndex, k, useQuery)
+   if true then 
+      -- skip tests of method smooth which is deprecated
+      return
+   end
    assert(queryIndex)
    assert(k)
    assert(useQuery ~= nil)
@@ -181,7 +171,7 @@ end -- smoothOLD
 
 -- test smoothing without using the query point
 function tests:testSmooth1()
-   --if true then return end
+   if true then return end
    local nSamples, nDims, xs, ys = makeExample()
    local knn = Knn(xs, ys, xs:size(1) - 1)
    local function smooth(queryIndex, k, useQuery)
@@ -205,6 +195,7 @@ end
 
 -- test smoothing using the query point
 function tests:testSmooth2()
+   if true then return end
    local nSamples, nDims, xs, ys = makeExample()
    local knn = Knn(xs, ys, xs:size(1) - 1)
    local function smooth(queryIndex, k, useQuery)
@@ -229,6 +220,7 @@ end
 
 -- test whether smoothing using the cache
 function tests:testSmooth3()
+   if true then return end
    --if true then return end
    local v, trace = makeVerbose(false, 'tests:testSmooth3')
 
@@ -292,6 +284,7 @@ function tests:testSmooth3()
 end
 
 function tests.bugZeroIndexValues()
+   if true then return end
    -- sometimes a zero index value is generated in the cache
    -- this cannot happen!
    -- Hyp: the cache indices need to be 32 bits wide, not 8
@@ -304,7 +297,8 @@ function tests.bugZeroIndexValues()
    local kmax = 11
    local useQueryPoint = false
 
-   local knn = Knn(xs, ys, kmax)
+   local enableCache = true
+   local knn = Knn(xs, ys, not enableCache)
    -- following line should generate an error before bug is fixed
    -- Since the test depends on random numbers used to initialize the xs,
    -- It may not always fail
