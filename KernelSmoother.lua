@@ -29,26 +29,21 @@ function KernelSmoother:euclideanDistances(xs, query)
    -- It computes all the distances from the query point at once
    -- using Clement Farabet's idea to speed up the computation.
 
-   local v, trace = makeVerbose(false, 'Knn:_euclideanDistances')
-
-   v('self', self)
-   v('xs', xs)
-   v('query', query)
-
-   affirm.isTensor2D(xs, 'xs')
-   affirm.isTensor1D(query, 'query')
-
+   local v, isVerbose = makeVerbose(false, 'Knn:_euclideanDistances')
+   verify(v,
+          isVerbose,
+          {{xs, 'xs', 'isTensor2D'},
+           {query, 'query', 'isTensor1D'}})
+            
    assert(xs:size(2) == query:size(1),
           'number of columns in xs must equal size of query')
 
-   query = query:clone()  -- in case the query is a view of the xs storage
-   
    -- create a 2D Tensor where each row is the query
    -- This construction is space efficient relative to replicating query
    -- queries[i] == query for all i in range
    -- Thanks Clement Farabet!
    local queries = 
-      torch.Tensor(query:storage(),
+      torch.Tensor(query:clone():storage(),-- clone in case query is a row of xs
                    1,                    -- offset
                    xs:size(1), 0,   -- row index offset and stride
                    xs:size(2), 1)   -- col index offset and stride
