@@ -9,7 +9,7 @@ require 'verify'
 if false then
    -- xs are the inputs, a 2D Tensor
    -- ys are the targets, a 1D Tensor
-   local knn = Knn(xs, yy, enableCache)
+   local knn = Knn(xs, ys, enableCache)
 
    -- attributes
    modelXs = knn.xs   -- xs from construction
@@ -17,11 +17,12 @@ if false then
 
    -- average of k nearest neighbors using Euclidean distance in xs to query
    -- the implementation requires k <= 256
-   local ok, estimate, cacheHit = knn:estimate(query, k)
+   local ok, estimate = knn:estimate(query, k)
    if not ok then
       error(estimate)  -- in this case, estimate is a string
    end
 
+   -- NOTE: smooth is deprecated
    -- re-estimate xs[queryIndex] using k nearest neighbor
    -- maybe exclude ys[queryIndex] from this estimate
    local useQueryPoint = false
@@ -50,7 +51,7 @@ function Knn:__init(xs, ys, enableCache)
    --                 if true, create a cache of previous entries, thus
    --                 using more space and less time
 
-   local v, isVerbose = makeVerbose(true, 'Knn:__init')
+   local v, isVerbose = makeVerbose(false, 'Knn:__init')
    verify(v, 
           isVerbose,
           {{xs, 'xs', 'isTensor2D'},
@@ -256,7 +257,7 @@ function Knn:_resizeAllSortedIndices(allSortedIndices)
    -- simply resizing via allSortedDistances:resize(kmax) does not shrink
    -- the underlying storage
    -- hence this build and copy operation
-   local v = makeVerbose(true, 'Knn:_resizeAllSortedIndices')
+   local v = makeVerbose(false, 'Knn:_resizeAllSortedIndices')
    v('allSortedIndices', allSortedIndices)
    local sortedIndices = torch.IntTensor(self._maxK):fill(0)
    for i = 1, math.min(allSortedIndices:size(1), self._maxK) do
