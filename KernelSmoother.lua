@@ -70,7 +70,7 @@ function KernelSmoother:weightedAverage(ys, weights)
    -- RETURN
    --    true, weightedAverage
    --    false, reason
-   local v, isVerbose = makeVerbose(true, 'KernelSmoother:weightedAverage')
+   local v, isVerbose = makeVerbose(false, 'KernelSmoother:weightedAverage')
    verify(v,
           isVerbose,
           {{ys, 'ys', 'isTensor1D'},
