@@ -6,8 +6,12 @@
 if false then
    local kwavg = Kwavg(xs, ys, 'epanechnikov quadratic')
 
-   local estimate = Knn:estimate(query, lambda)
+   local ok, estimate = kwavg:estimate(query, lambda)
+   if not ok then
+      -- estimate is a string explaining why no estimate was provided
+   end
 
+   -- smooth is DEPRECATED
    local useQueryPoint = false
    local smoothedEstimate = Kwavg:smooth(queryIndex, lambda,
                                          useQueryPoint)
@@ -16,7 +20,7 @@ end
 require 'affirm'
 require 'KernelSmoother'
 require 'makeVerbose'
-
+require 'verify'
 
 
 
@@ -35,16 +39,21 @@ function Kwavg:__init(xs, ys, kernelName)
    --              y[i] is the known value (target) of input sample xs[i]
    --              number of ys must equal number of rows in xs
    -- kernelName : string
-   affirm.isTensor2D(xs, 'xs')
-   affirm.isTensor1D(ys, 'ys')
-   affirm.isString(kernelName, 'kernelName')
+   local v, verbose = makeVerbose(false, 'Kwavg:__init')
+
+   verify(v,
+          verbose,
+          {{xs, 'xs', 'isTensor2D'},
+           {ys, 'ys', 'isTensor1D'},
+           {kernelName, 'kernelName', 'isString'}
+          })
 
    assert(kernelName == 'epanechnikov quadratic',
           'for now, only kernel supported is epanechnikov quadratic')
    self._xs = xs
    self._ys = ys
    self._kernelName = kernelName
-   self._kernelsmoother = KernelSmoother()
+   self._kernelSmoother = KernelSmoother()
 end
 
 --------------------------------------------------------------------------------
@@ -60,17 +69,19 @@ function Kwavg:estimate(query, lambda)
    --                  estimate is a number
    -- false, reason  : no estimate was produced
    --                  reason is a string
-   local v = makeVerbose(false, 'Kwavg:estimate')
+   local v, verbose = makeVerbose(false, 'Kwavg:estimate')
 
-   v('self', self)
-   v('query', query)
-   v('lambda', lambda)
+   verify(v,
+          verbose,
+          {{query, 'query', 'isTensor1D'},
+           {lambda, 'lambda', 'isNumberPositive'}
+          })
 
-   affirm.isTensor1D(query, 'query')
-   affirm.isNumberPositive(lambda, 'lambda')
-
-   local weights = self:_determineWeights(query, lambda)
-   local ok, estimate = self:_weightedAverage(weights)
+   local weights = self._kernelSmoother:weights(self._xs, 
+                                                query, 
+                                                lambda)
+   local ok, estimate = self._kernelSmoother:weightedAverage(self._ys, 
+                                                             weights)
    
    v('weights', weights)
    v('ok', ok)
@@ -79,6 +90,8 @@ function Kwavg:estimate(query, lambda)
    return ok, estimate
 end -- estimate
 
+-- DEPRECATE smooth method
+--[[
 function Kwavg:smooth(queryIndex, lambda, useQueryPoint)
    -- re-estimate y for an existing xs[queryIndex]
    -- ARGS:
@@ -121,72 +134,10 @@ function Kwavg:smooth(queryIndex, lambda, useQueryPoint)
 
    return ok, value
 end -- smooth
+   --]]
 
 --------------------------------------------------------------------------------
 -- PRIVATE METHODS
 --------------------------------------------------------------------------------
 
-function Kwavg:_determineWeights(query, lambda) 
-   -- return 1D tensor such that result[i] = Kernel_lambda(query, xs[i])
-   -- We require use of Euclidean distance so that this code will work.
-   -- It computes all the distances from the query point at once
-   -- using Clement Farabet's idea to speed up the computation.
-
-   local v = makeVerbose(false, 'Kwavg:_determineWeights')
-   
-   v('query', query)
-   v('lambda', lambda)
-
-   affirm.isTensor1D(query, 'query')
-   affirm.isNumberPositive(lambda, 'lambda')
-
-   local distances = self._kernelsmoother:euclideanDistances(self._xs, query)
-   local t = distances / lambda
-   
-   local one = torch.Tensor(self._xs:size(1)):fill(1)
-   local dt = torch.mul(one - torch.cmul(t, t), 0.75)
-   local le = torch.le(torch.abs(t), one):type('torch.DoubleTensor')
-   local weights = torch.cmul(le, dt)
-   
-   v('t', t)
-   v('dt', dt)
-   v('le', le)
-   v('weights', weights)
-   
-   return weights
-end -- _determineWeights
-
-function Kwavg:_weightedAverage(weights)
-   -- attempt to determine weighted average of the weights and y values
-   -- RETURNS
-   -- true, weightedAverage : if the weighted average can be determined
-   --                         weightedAverage is a number
-   -- false, reason         : if the weighted average cannot be determined
-   --                         reason is a string          
-   local v = makeVerbose(false, 'Kwavg:_weightedAverage')
-
-   v('weights', weights)
-
-   affirm.isTensor1D(weights, 'weights')
-
-   assert(weights:size(1) == self._ys:size(1),
-          'weights not same size as ys')
-
-   local sumWeights = torch.sum(weights)
-
-   if sumWeights == 0 then
-      local reason = 'all weights used were 0'
-      return false, reason
-   end
-
-   local numerator = torch.sum(torch.cmul(weights, self._ys))
-   local result = numerator / sumWeights
-   
-   v('numerator', numerator)
-   v('sumWeights', sumWeights)
-   v('result', result)
-
-   assert(result == result, 'result is NaN')
-
-   return true, result
-end -- _weightedAverage
+-- NONE
