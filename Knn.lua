@@ -11,7 +11,7 @@ if false then
    -- ys are the targets, a 1D Tensor
 
    -- smooth existing values (as during cross validation)
-   cache = Nncachebuilder.read('path/to/cache file')
+   cache = Nncachebuilder.read(filePathPrefix)
    knn = KnnSmoother(allXs, allYs, selected, cache)
    -- re-estimate observation in allXs 
    -- the re-estimated observation must have been selected
@@ -84,7 +84,7 @@ function KnnSmoother:__init(allXs, allYs, selected, cache)
    self._selected = selected
    self._cache = cache
 
-   self._kMax = Nncachebuilder._maxNeighbors()
+   self._kMax = Nncachebuilder.maxNeighbors()
 end -- __init
 
 -----------------------------------------------------------------------------
@@ -130,18 +130,18 @@ function KnnEstimator:estimate(query, k)
 end -- KnnEstimator:estimate
 
 function KnnSmoother:estimate(obsIndex, k)
-   local v, isVerbose = makeVerbose(true, 'KnnSmoother:estimate')
+   local v, isVerbose = makeVerbose(false, 'KnnSmoother:estimate')
    verify(v, isVerbose,
           {{obsIndex, 'obsIndex', 'isIntegerPositive'},
            {k, 'k', 'isIntegerPositive'}})
    
-   assert(self._selected[obsIndex] == 1,
-         'query obsIndex was not selected')
-   assert(k <= Nncachebuilder:_maxNeighbors())
+   -- any observation can be re-estimated so test below is incorrect
+   --assert(self._selected[obsIndex] == 0,
+   --      'query obsIndex was not selected')
+   assert(k <= Nncachebuilder:maxNeighbors())
 
-   local query = self._allXs[obsIndex]:clone()
-   local nearestIndices = KernelSmoother.nearestIndices(self._allXs,
-                                                        query)
+   local nearestIndices = self._cache[obsIndex]
+   assert(nearestIndices)
    v('nearestIndices', nearestIndices)
    v('self._selected', self._selected)
 
@@ -154,6 +154,7 @@ function KnnSmoother:estimate(obsIndex, k)
    local used = 0
    for i = 1, nearestIndices:size(1) do
       local neighborIndex = nearestIndices[i]
+      v('neighborIndex', neighborIndex)
       if self._selected[neighborIndex] == 1 then
          used = used + 1
          v('used neighborIndex', neighborIndex)
