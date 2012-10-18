@@ -1,20 +1,19 @@
 -- KernelSmoother.lua
--- auxillary class for all kernel smoothers
--- used to hold utility functions
--- could have been a parent class
+-- auxillary functions for all kernel smoothers
 
 -- API overview
 if false then
-   ks = KernelSmoother()
-   
    -- distances from query to each x
-   distance = ks:euclideanDistances(xs, query) 
+   distance = KernelSmoother.euclideanDistances(xs, query) 
+
+   -- indices of all nearest points to query
+   indices = KernelSmoother.nearestIndices(xs, query)
 
    -- weights using Epanechnikov quadratic kernel from query with radius lambda
-   weights = ks:weights(xs, query, lambda)
+   weights = KernelSmoother.weights(xs, query, lambda)
 
    -- weighted average ys 
-   weightedAverage = ks:weightedAverage(weights)
+   weightedAverage = KernelSmoother.weightedAverage(weights)
 end
 
 --------------------------------------------------------------------------------
@@ -31,13 +30,13 @@ end -- __init
 --------------------------------------------------------------------------------
 
 
-function KernelSmoother:euclideanDistances(xs, query)
+function KernelSmoother.euclideanDistances(xs, query)
    -- return 1D tensor such that result[i] = EuclideanDistance(xs[i], query)
    -- We require use of Euclidean distance so that this code will work.
    -- It computes all the distances from the query point at once
    -- using Clement Farabet's idea to speed up the computation.
 
-   local v, isVerbose = makeVerbose(false, 'Knn:_euclideanDistances')
+   local v, isVerbose = makeVerbose(false, 'KernelSmoother:euclideanDistances')
    verify(v,
           isVerbose,
           {{xs, 'xs', 'isTensor2D'},
@@ -65,7 +64,18 @@ function KernelSmoother:euclideanDistances(xs, query)
    return distances
 end -- euclideanDistances
 
-function KernelSmoother:weightedAverage(ys, weights)
+function KernelSmoother.nearestIndices(xs, query)
+   -- return 1D tensor sorted in order of nearest of query to each row of xs
+   local v, isVerbose = makeVerbose(false, 'KernelSmoother:sortedIndices')
+   verify(v, isVerbose,
+          {{xs, 'xs', 'isTensor2D'},
+           {query, 'query', 'isTensor1D'}})
+   local distances = KernelSmoother.euclideanDistances(xs, query)
+   local _, sortedIndices = torch.sort(distances)
+   return sortedIndices
+end -- sortedIndices
+
+function KernelSmoother.weightedAverage(ys, weights)
    -- maybe return weighted average of ys
    -- RETURN
    --    true, weightedAverage
@@ -99,32 +109,48 @@ function KernelSmoother:weightedAverage(ys, weights)
    return true, result
 end -- weightedAverage
 
-function KernelSmoother:weights(xs, query, lambda) 
+function KernelSmoother.weights(xs, query, lambda) 
    -- return 1D tensor such that result[i] = Kernel_lambda(query, xs[i])
    -- We require use of Euclidean distance so that this code will work.
    -- It computes all the distances from the query point at once
    -- using Clement Farabet's idea to speed up the computation.
 
-   local v, isVerbose = makeVerbose(false, 'Kwavg:_determineWeights')
+   local v, isVerbose = makeVerbose(false, 'KernelSmoother:_determineWeights')
+   local debug = 0 -- weights all 0.75 in call from Llr:estimate
+   if debug ~= 0 then
+      print('DEBUGGING KernelSmoother:weights')
+   end
+
    verify(v,
           isVerbose,
           {{xs, 'xs', 'isTensor2D'},
            {query, 'query', 'isTensor1D'},
            {lambda, 'lambda', 'isNumberPositive'}})
    
-   local distances = self:euclideanDistances(xs, query)
+   local distances = KernelSmoother.euclideanDistances(xs, query)
+   v('distances', distances)
+   if debug == 1 and allZeroes(distances) then
+         error('distances are all zeroes')
+   end
+
    local t = distances / lambda
-   
+   if debug == 1 and allZeroes(t) then
+      error('t is all zeroes')
+   end
+
    local one = torch.Tensor(xs:size(1)):fill(1)
    local dt = torch.mul(one - torch.cmul(t, t), 0.75)
    local le = torch.le(torch.abs(t), one):type('torch.DoubleTensor')
    local weights = torch.cmul(le, dt)
    
-   v('distances', distances)
    v('t', t)
    v('dt', dt)
    v('le', le)
    v('weights', weights)
+
+   if debug == 1 and allZeroes(weights) then
+      error('weights are all Zeroes')
+   end
    
    return weights
 end -- weights
