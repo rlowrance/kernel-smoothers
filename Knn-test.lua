@@ -1,5 +1,5 @@
 -- Knn-test.lua
--- unit tests for class Knn
+-- unit tests for class KnnEstimator and KnnSmoother
 
 require 'all'
 
@@ -15,13 +15,78 @@ function makeExample()
    for i = 1, nsamples do
       for d = 1, ndims do
          xs[i][d] = i
-         ys[i] = i
+         ys[i] = i * 10
       end
    end
    return nsamples, ndims, xs, ys
 end -- makeExample
 
+function tests.KnnEstimator()
+   local v = makeVerbose(false, 'tests.KnnEstimator')
+   local nSamples, nDims, xs, ys = makeExample()
+   local query = torch.Tensor(nDims):fill(3)
+   local knn = KnnEstimator(xs, ys)
 
+   local function test(k, expected)
+      local ok, estimate = knn:estimate(query, k)
+      tester:assert(ok)
+      tester:asserteq(expected, estimate)
+   end
+
+   test(1, 30)
+   test(3, 30)
+   test(5, 30)
+   test(6, 35)
+   test(7, 40)
+   test(8, 45)
+   test(9, 50)
+   test(10, 55)
+end -- KnnEstimator
+
+function tests.KnnSmoother()
+   local v, isVerbose = makeVerbose(true, 'tests.KnnSmoother')
+   local nSamples, nDims, xs, ys = makeExample()
+   
+   -- build up the nearest neighbors cache
+   local nShards = 1
+   local nncb = Nncachebuilder(xs, nShards)
+   local filePathPrefix = '/tmp/Knn-test-cache'
+   nncb:createShard(1, filePathPrefix)
+   nncb:mergeShards(filePathPrefix)
+   local cache = Nncachebuilder.read(filePathPrefix)
+   v('cache', cache)
+   if isVerbose then
+      for key, value in pairs(cache) do
+         print(string.format('cache[%d] = %s', key, tostring(value)))
+      end
+   end
+   
+   
+   local selector = torch.ByteTensor(nSamples):fill(0)
+   for i = 1, nSamples / 2 do
+      selector[i] = 1
+   end
+   v('selector', selector)
+      
+   v('xs', xs)
+   local knn = KnnSmoother(xs, ys, selector, cache)
+   
+   local queryIndex = 5
+
+   local function test(k, expected)
+      local ok, estimate = knn:estimate(queryIndex, k)
+      tester:assert(ok)
+      tester:asserteq(expected, estimate)
+   end
+
+   test(1, 50)
+   test(2, 45)
+   test(3, 40)
+   test(4, 35)
+   test(5, 30)
+end -- KnnSmoother
+
+--[[
 function tests.seeNeighbors()
    if true then return end
    -- check on neighbor indices returned from method smooth
@@ -310,8 +375,10 @@ function tests.bugZeroIndexValues()
    end
    tester:assert(true, 'got this far')
 end
+   --]]
 
 -- run unit tests
+print('*********************************************************************')
 if false then
    --tester:add(tests.bugZeroIndexValues, 'tests.bugZeroIndexValues')
    tester:add(tests._euclideanDistances, 'tests._euclideanDistances')
