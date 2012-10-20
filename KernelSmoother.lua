@@ -29,6 +29,19 @@ end -- __init
 -- PUBLIC METHODS
 --------------------------------------------------------------------------------
 
+function KernelSmoother.euclideanDistance(x1, x2)
+   local v, isVerbose = makeVerbose(true, 'KernelSmoother:euclideanDistance')
+   verify(v, isVerbose,
+          {{x1, 'x1', 'isTensor1D'},
+           {x2, 'x2', 'isTensor1D'}})
+   assert(x1:size(1) == x2:size(1))
+
+   local ds = torch.add(x1, -1, x2)  -- x1 - x2
+   ds:cmul(ds)
+   local d = math.sqrt(torch.sum(ds))
+   return d
+end -- euclideanDistance
+   
 
 function KernelSmoother.euclideanDistances(xs, query)
    -- return 1D tensor such that result[i] = EuclideanDistance(xs[i], query)
@@ -64,16 +77,19 @@ function KernelSmoother.euclideanDistances(xs, query)
    return distances
 end -- euclideanDistances
 
-function KernelSmoother.nearestIndices(xs, query)
-   -- return 1D tensor sorted in order of nearest of query to each row of xs
-   local v, isVerbose = makeVerbose(false, 'KernelSmoother:sortedIndices')
+function KernelSmoother.nearest(xs, query)
+   -- determine distance from query to each row of xs
+   -- RETURN
+   -- sortedDistances : 1D Tensor 
+   -- sortedIndices   : 1D Tensor 
+   local v, isVerbose = makeVerbose(false, 'KernelSmoother:nearest')
    verify(v, isVerbose,
           {{xs, 'xs', 'isTensor2D'},
            {query, 'query', 'isTensor1D'}})
    local distances = KernelSmoother.euclideanDistances(xs, query)
-   local _, sortedIndices = torch.sort(distances)
-   return sortedIndices
-end -- sortedIndices
+   local sortedDistances, sortedIndices = torch.sort(distances)
+   return sortedDistances, sortedIndices
+end -- nearest
 
 function KernelSmoother.weightedAverage(ys, weights)
    -- maybe return weighted average of ys
@@ -109,17 +125,29 @@ function KernelSmoother.weightedAverage(ys, weights)
    return true, result
 end -- weightedAverage
 
-function KernelSmoother.weights(xs, query, lambda) 
+function KernelSmoother.kernels(sortedDistances, lambda)
+   -- return values of Epanenchnov kernel using euclidean distance
+   local v, isVerbose = makeVerbose(true, 'KernelSmoother.kernels')
+   verify(v, isVerbose,
+          {{sortedDistances, 'sortedDistances', 'isTensor1D'},
+           {lambda, 'lambda', 'isNumberPositive'}})
+   local nObs = sortedDistances:size(1)
+   local t = sortedDistances / lambda
+   local one = torch.Tensor(nObs):fill(1)
+   local dt = torch.mul(one - torch.cmul(t, t), 0.75)
+   local le = torch.le(torch.abs(t), one):type('torch.DoubleTensor')
+   local kernels = torch.cmul(le, dt)
+   v('kernels', kernels)
+   return kernels
+end -- kernels
+
+function KernelSmoother.kernelOLD(xs, query, lambda) 
    -- return 1D tensor such that result[i] = Kernel_lambda(query, xs[i])
    -- We require use of Euclidean distance so that this code will work.
    -- It computes all the distances from the query point at once
    -- using Clement Farabet's idea to speed up the computation.
 
-   local v, isVerbose = makeVerbose(false, 'KernelSmoother:_determineWeights')
-   local debug = 0 -- weights all 0.75 in call from Llr:estimate
-   if debug ~= 0 then
-      print('DEBUGGING KernelSmoother:weights')
-   end
+   local v, isVerbose = makeVerbose(false, 'KernelSmoother:kernel')
 
    verify(v,
           isVerbose,
@@ -129,9 +157,6 @@ function KernelSmoother.weights(xs, query, lambda)
    
    local distances = KernelSmoother.euclideanDistances(xs, query)
    v('distances', distances)
-   if debug == 1 and allZeroes(distances) then
-         error('distances are all zeroes')
-   end
 
    local t = distances / lambda
    if debug == 1 and allZeroes(t) then
@@ -148,9 +173,5 @@ function KernelSmoother.weights(xs, query, lambda)
    v('le', le)
    v('weights', weights)
 
-   if debug == 1 and allZeroes(weights) then
-      error('weights are all Zeroes')
-   end
-   
    return weights
 end -- weights

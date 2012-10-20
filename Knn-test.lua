@@ -21,30 +21,48 @@ function makeExample()
    return nsamples, ndims, xs, ys
 end -- makeExample
 
-function tests.KnnEstimator()
-   local v = makeVerbose(false, 'tests.KnnEstimator')
+function tests.estimator()
+   local v = makeVerbose(false, 'tests.estimator')
    local nSamples, nDims, xs, ys = makeExample()
    local query = torch.Tensor(nDims):fill(3)
-   local knn = KnnEstimator(xs, ys)
 
-   local function test(k, expected)
+   local function test(k, expectedSimpleAverage, expectedWeightedAverage)
+      -- simple average
+      --v('xs', xs)
+      local knn = KnnEstimatorAvg(xs, ys)
       local ok, estimate = knn:estimate(query, k)
+      v('ok,estimate', ok, estimate)
       tester:assert(ok)
-      tester:asserteq(expected, estimate)
+      tester:asserteq(expectedSimpleAverage, estimate)
+
+      -- weighted average
+      if expectedWeightedAverage then
+         local knn = KnnEstimatorKwavg(xs, ys)
+         local ok, estimate = knn:estimate(query, k)
+         local tol = 1e-3
+         if expectedWeightedAverage then
+            tester:assert(ok)
+            tester:assertle(math.abs(expectedWeightedAverage - estimate), tol)
+         else
+            tester:assert(not ok)
+         end
+      end
    end
 
-   test(1, 30)
-   test(3, 30)
-   test(5, 30)
-   test(6, 35)
-   test(7, 40)
+   -- see lab book for 2012-10-18 for calculations
+   test(1, 30, false)
+   test(3, 30, 30)
+   test(5, 30, 30) 
+   test(6, 35, 30)    
+   test(7, 40, 32.7277) 
    test(8, 45)
    test(9, 50)
    test(10, 55)
 end -- KnnEstimator
 
-function tests.KnnSmoother()
-   local v, isVerbose = makeVerbose(true, 'tests.KnnSmoother')
+function tests.smoother()
+   --if true then return end
+   local v, isVerbose = makeVerbose(true, 'tests.smoother')
    local nSamples, nDims, xs, ys = makeExample()
    
    -- build up the nearest neighbors cache
@@ -52,7 +70,7 @@ function tests.KnnSmoother()
    local nncb = Nncachebuilder(xs, nShards)
    local filePathPrefix = '/tmp/Knn-test-cache'
    nncb:createShard(1, filePathPrefix)
-   nncb:mergeShards(filePathPrefix)
+   Nncachebuilder.mergeShards(nShards, filePathPrefix)
    local cache = Nncachebuilder.read(filePathPrefix)
    v('cache', cache)
    if isVerbose then
@@ -69,14 +87,14 @@ function tests.KnnSmoother()
    v('selector', selector)
       
    v('xs', xs)
-   local knn = KnnSmoother(xs, ys, selector, cache)
+   local knn = KnnSmootherAvg(xs, ys, selector, cache)
    
    local queryIndex = 5
 
-   local function test(k, expected)
+   local function test(k, expectedSimpleAverage)
       local ok, estimate = knn:estimate(queryIndex, k)
       tester:assert(ok)
-      tester:asserteq(expected, estimate)
+      tester:asserteq(expectedSimpleAverage, estimate)
    end
 
    test(1, 50)

@@ -1,5 +1,8 @@
 -- Knn.lua
--- k nearest neighbors algorithm in two variants
+-- k nearest neighbors algorithm in two variants: Estimator, Smoother
+-- with 3 methods: simpleAverage, weightedAverage, localLinearRegression
+-- the weighted average and llr methods use a k-nearest neighborhood, not
+-- a metric neighborhood (see Hastie-01,  p 167)
 
 require 'affirm'
 require 'makeVerbose'
@@ -12,25 +15,118 @@ if false then
 
    -- smooth existing values (as during cross validation)
    cache = Nncachebuilder.read(filePathPrefix)
-   knn = KnnSmoother(allXs, allYs, selected, cache)
-   -- re-estimate observation in allXs 
-   -- the re-estimated observation must have been selected
-   ok, estimate = knn(obsIndex, k)         -- re-estimate allXs[obsIndex]
 
-   -- estimate new query (as after cross validation has found best k)
-   knn = KnnEstimator(xs, ys)
-   ok, estimate = knn(query, k)            -- estimate a new query
+   -- Smoother: simple average of k nearest neighbors
+   knn = KnnSmootherAvg(allXs, allYs, selected, cache)
+   ok, estimate = knn:estimate(obsIndex, k) 
+
+   -- Smoother: weighted average of k nearest neighbors
+   knn = KnnSmootherKwavg(allXs, allYs, selected, cache, 
+                          'epanechnikov quadratic')
+   ok, estimate = knn:estimate(obsIndex, k) 
+
+   -- Smoother: regularized local linear regression
+   knn = KnnSmootherLlr(allXs, allYs, selected, cache, 
+                        'epanenchnikov quadratic')
+   ok, estimate = knn:estimate(obsIndex, {k, regularizer})
+
+   -- Estimator: simple average of k nearest neighbors
+   knn = KnnEstimatorAvg(xs, ys)
+   ok, estimate = knn:estimate(obsIndex, k)
+
+   -- Estimator: weighted average of k nearest neighbors
+   knn = KnnEstimatorKwavg(allXs, allYs, selected, cache, 
+                           'epanechnikov quadratic')
+   ok, estimate = knn:estimate(obsIndex, k)
+
+   -- Estimator: local linear regression
+   knn = KnnEstimatorLlr(allXs, allYs, selected, cache, 
+                         'epanechnikov quadratic')
+   ok, estimate = knn:estimate(obsIndex, {k, regularizer})
 end -- API overview
 
 --------------------------------------------------------------------------------
--- CONSTRUCTION
+-- Knn : Auxillary methods (serves same purpose as prior KernelSmoother class)
+--------------------------------------------------------------------------------
+
+Knn = {}
+
+function Knn.euclideanDistances(xs, query)
+   -- return 1D tensor such that result[i] = EuclideanDistance(xs[i], query)
+   -- We require use of Euclidean distance so that this code will work.
+   -- It computes all the distances from the query point at once
+   -- using Clement Farabet's idea to speed up the computation.
+
+   local v, isVerbose = makeVerbose(false, 'KernelSmoother:euclideanDistances')
+   verify(v,
+          isVerbose,
+          {{xs, 'xs', 'isTensor2D'},
+           {query, 'query', 'isTensor1D'}})
+            
+   assert(xs:size(2) == query:size(1),
+          'number of columns in xs must equal size of query')
+
+   -- create a 2D Tensor where each row is the query
+   -- This construction is space efficient relative to replicating query
+   -- queries[i] == query for all i in range
+   -- Thanks Clement Farabet!
+   local queries = 
+      torch.Tensor(query:clone():storage(),-- clone in case query is a row of xs
+                   1,                    -- offset
+                   xs:size(1), 0,   -- row index offset and stride
+                   xs:size(2), 1)   -- col index offset and stride
+      
+   local distances = torch.add(queries, -1 , xs) -- queries - xs
+   distances:cmul(distances)                          -- (queries - xs)^2
+   distances = torch.sum(distances, 2):squeeze() -- \sum (queries - xs)^2
+   distances = distances:sqrt()                  -- Euclidean distances
+  
+   v('distances', distances)
+   return distances
+end -- Knn.euclideanDistances
+
+function Knn.kernels(sortedDistances, lambda)
+   -- return values of Epanenchnov kernel using euclidean distance
+   local v, isVerbose = makeVerbose(true, 'KernelSmoother.kernels')
+   verify(v, isVerbose,
+          {{sortedDistances, 'sortedDistances', 'isTensor1D'},
+           {lambda, 'lambda', 'isNumberPositive'}})
+   local nObs = sortedDistances:size(1)
+   local t = sortedDistances / lambda
+   local one = torch.Tensor(nObs):fill(1)
+   local dt = torch.mul(one - torch.cmul(t, t), 0.75)
+   local le = torch.le(torch.abs(t), one):type('torch.DoubleTensor')
+   local kernels = torch.cmul(le, dt)
+   v('kernels', kernels)
+   return kernels
+end -- Knn.kernels
+
+
+
+
+function Knn.nearest(xs, query)
+   -- find nearest observations to a query
+   -- RETURN
+   -- sortedDistances : 1D Tensor 
+   -- sortedIndices   : 1D Tensor 
+   local v, isVerbose = makeVerbose(false, 'Knn.nearest')
+   verify(v, isVerbose,
+          {{xs, 'xs', 'isTensor2D'},
+           {query, 'query', 'isTensor1D'}})
+   local distances = Knn.euclideanDistances(xs, query)
+   local sortedDistances, sortedIndices = torch.sort(distances)
+   return sortedDistances, sortedIndices
+end -- Knn.example
+
+
+--------------------------------------------------------------------------------
+-- KnnEstimator: parent class of all KnnEstimatorXXX classes
 --------------------------------------------------------------------------------
 
 torch.class('KnnEstimator')
-torch.class('KnnSmoother')
 
 function KnnEstimator:__init(xs, ys)
-   local v, isVerbose = makeVerbose(false, 'KnnEstimator:__init')
+   local v, isVerbose = makeVerbose(false, 'Knn:__init')
    verify(v, isVerbose,
           {{xs, 'xs', 'isTensor2D'},
            {ys, 'ys', 'isTensor1D'}})
@@ -39,7 +135,13 @@ function KnnEstimator:__init(xs, ys)
 
    self._xs = xs
    self._ys = ys
-end -- KnnEstimator:__init
+end -- KnnEstimator:__init()
+
+--------------------------------------------------------------------------------
+-- KnnSmoother parent class of all KnnSmootherXXX classes
+--------------------------------------------------------------------------------
+
+torch.class('KnnSmoother')
 
 function KnnSmoother:__init(allXs, allYs, selected, cache) 
    -- ARGS:
@@ -85,59 +187,136 @@ function KnnSmoother:__init(allXs, allYs, selected, cache)
    self._cache = cache
 
    self._kMax = Nncachebuilder.maxNeighbors()
-end -- __init
+end -- KnnSmoother:__init()
 
------------------------------------------------------------------------------
--- PUBLIC METHODS
------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+-- KnnEstimatorAvg
+--------------------------------------------------------------------------------
 
-function KnnEstimator:estimate(query, k)
+local _, parent = torch.class('KnnEstimatorAvg', 'KnnEstimator')
+
+function KnnEstimatorAvg:__init(xs, ys)
+   parent.__init(self, xs, ys)
+end -- KnnEstimatorAvg:__init
+
+function KnnEstimatorAvg:estimate(query, k)
    -- estimate y for a new query point using the Euclidean distance
    -- ARGS:
    -- query : 1D Tensor
-   -- k     : integer >= 1 
-   --         there is no limit on k when estimating
-   --         but there is such a limit when smoothing
+   -- k     : integer > 0, number of neighbors
    -- RESULTS:
    -- true, estimate : estimate is the estimate for the query
    --                  estimate is a number
    -- false, reason  : no estimate was produced
-   --                  rsult is a string
-   -- NOTE: the status result is not really needed for this implemenation
-   -- of Knn. However, other kernel-smoothers in this package need it, so
-   -- for consistency, its included here.
+   --                  reason is a string
 
-   local v, isVerbose = makeVerbose(true, 'KnnEstimator:estimate')
+
+   local v, isVerbose = makeVerbose(false, 'KnnEstimatorAvg:estimate')
    verify(v,
           isVerbose,
           {{query, 'query', 'isTensor1D'},
            {k, 'k', 'isIntegerPositive'}})
 
-   assert(k <= self._xs:size(1))
+   local sortedDistances, sortedIndices = 
+      Knn.nearest(self._xs, query)
 
-   local nearestIndices = KernelSmoother.nearestIndices(self._xs,
-                                                        query)
-
-   -- determine average of k nearest
    local sum = 0
    for neighborIndex = 1, k do
-      local obsIndex = nearestIndices[neighborIndex]
+      local obsIndex = sortedIndices[neighborIndex]
       sum = sum + self._ys[obsIndex]
    end
    
-   local result = sum / k
-   return true, result
+   local estimate = sum / k
+   return true, estimate
 end -- KnnEstimator:estimate
 
-function KnnSmoother:estimate(obsIndex, k)
-   local v, isVerbose = makeVerbose(false, 'KnnSmoother:estimate')
+--------------------------------------------------------------------------------
+-- KnnEstimatorKwavg
+--------------------------------------------------------------------------------
+
+local _, parent = torch.class('KnnEstimatorKwavg', 'KnnEstimator')
+
+function KnnEstimatorKwavg:__init(xs, ys)
+   parent.__init(self, xs, ys)
+end -- KnnEstimatorKwavg:__init()
+
+
+function KnnEstimatorKwavg:estimate(query, k)
+   local v, isVerbose = makeVerbose(true, 'KnnEstimatorKwavg:estimate')
+   verify(v, isVerbose,
+          {{query, 'query', 'isTensor1D'},
+           {k, 'k', 'isIntegerPositive'}})
+
+   local sortedDistances, sortedIndices =
+      Knn.nearest(self._xs, query)
+
+   local nObs = sortedDistances:size(1)
+   assert(k <= nObs)
+
+   local lambda = sortedDistances[k]
+   if lambda == 0 then
+      return false, 'kth nearest observation has 0 distance'
+   end
+
+   local kernels = Knn.kernels(sortedDistances, lambda)
+   v('kernels', kernels)
+
+   local sumYs = 0
+   local sumKernels = 0
+   for neighborIndex = 1, k do
+      local obsIndex = sortedIndices[neighborIndex]
+      local kernel = kernels[neighborIndex]
+      sumYs = sumYs + self._ys[obsIndex] * kernel
+      sumKernels = sumKernels + kernel
+   end
+
+   assert(sumKernels ~= 0)
+
+   local estimate = sumYs / sumKernels
+
+   return true, estimate
+end -- KnnEstimaorKwavg:estimate()
+
+--------------------------------------------------------------------------------
+-- KnnEstimatorLlr
+--------------------------------------------------------------------------------
+
+local _, parent = torch.class('KnnEstimatorLlr', 'KnnEstimator')
+
+function KnnEstimatorLlr:__init(xs, ys)
+   parent._init(self, xs, ys)
+end -- KnnEstimatorLlr:__init()
+
+function KnnEstimatorLlr:estimate(query, params)
+   local v, isVerbose = makeVerbose(true, 'KnnEstimatorLLr:estimate')
+   verify(v, isVerbose,
+          {{query, 'query', 'isTensor1D'},
+           {params, 'params', 'isTable'}})
+
+   local k = params.k
+   local regularizer = params.regularizer
+
+   print('STUB: KnnEstimatorLlr:estimate')
+   return false, 'not implemented'
+end -- KnnEstimatorLlr:estimate()
+
+--------------------------------------------------------------------------------
+-- KnnSmootherAvg
+--------------------------------------------------------------------------------
+
+local _, parent = torch.class('KnnSmootherAvg', 'KnnSmoother')
+
+function KnnSmootherAvg:__init(allXs, allYs, selected, cache) 
+   parent.__init(self, allXs, allYs, selected, cache)
+end -- KnnSmootherAvg:__init()
+
+
+function KnnSmootherAvg:estimate(obsIndex, k)
+   local v, isVerbose = makeVerbose(false, 'KnnSmootherAvg:estimate')
    verify(v, isVerbose,
           {{obsIndex, 'obsIndex', 'isIntegerPositive'},
            {k, 'k', 'isIntegerPositive'}})
    
-   -- any observation can be re-estimated so test below is incorrect
-   --assert(self._selected[obsIndex] == 0,
-   --      'query obsIndex was not selected')
    assert(k <= Nncachebuilder:maxNeighbors())
 
    local nearestIndices = self._cache[obsIndex]
@@ -170,4 +349,66 @@ function KnnSmoother:estimate(obsIndex, k)
 
    local result = sum / k
    return true, result
-end -- KnnSmoother:estimate
+end -- KnnSmootherAvg:estimate
+
+--------------------------------------------------------------------------------
+-- KnnSmootherKwavg
+--------------------------------------------------------------------------------
+
+local _, parent = torch.class('KnnSmootherKwavg', 'KnnSmoother')
+
+function KnnSmootherKwavg:__init(allXs, allYs, selected, cache)
+   parent.__init(self, allXs, allYs, selected, cache)
+end -- KnnSmootherKwavg:__init()
+
+function KnnSmootherKwavg:estimate(obsIndex, k)
+   local v, isVerbose = makeVerbose(true, 'KnnSmootherKwavg:estimate')
+   verify(v, isVerbose,
+          {{obsIndex, 'obsIndex', 'isIntegerPositive'},
+           {k, 'k', 'isIntegerPositive'}})
+   
+   assert(k <= Nncachebuilder:maxNeighbors())
+
+   local nearestIndices = self._cache[obsIndex]
+   assert(nearestIndices)
+   v('nearestIndices', nearestIndices)
+   v('self._selected', self._selected)
+   
+   -- FIX: we don't know the xs
+   local sortedDistances, sortedIndices = Knn.nearest(self._xs, query)
+   local lambda = sortedDistances[k]
+   if lambda == 0 then
+      return false, 'kth nearest observation has distance 0'
+   end
+
+   local kernels = Knn.kernels(sortedDistances, lambda)
+
+   -- determine kernel-weighted average of k nearest selected neighbors
+   -- NOTE: this can fail if we get unlucky
+   -- specifically, if k > (256 - 256/nfolds)
+   -- where 256 = Nncachebuild._maxNeighbors()
+   -- If so, increase value of Nncachebuilder._maxNeighbors() and rerun
+   local sumYs = 0
+   local sumKernels = 0
+   local used = 0
+   for neighborIndex = 1, nearestIndices:size(1) do
+      local obsIndex = sortedIndices[neighborIndex]
+      v('obsIndex', obsIndex)
+      if self._selected[obsIndex] == 1 then
+         used = used + 1
+         v('used obsIndex', obsIndex)
+         local kernel = kernels[neighborIndex]
+         sumYs = sumYs + self._allYs[obsIndex] * kernel
+         sumKernels = sumKernels + kernel
+         if used == k then 
+            break
+         end
+      end
+   end
+   assert(used == k,
+          'not enough pre-computed neighbor indices in cache' ..
+          '\nnearestIndices:size(1) = ' .. tostring(nearestIndices:size(1)))
+
+   local result = sumYs / sumKernels
+   return true, result
+end -- KnnSmootherKwavg:estimate()

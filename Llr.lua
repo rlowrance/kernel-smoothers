@@ -35,7 +35,7 @@ function Llr:__init(xs, ys, kernelName)
    --              y[i] is the known value (target) of input sample xs[i]
    --              number of ys must equal number of rows in xs
    -- kernelName : string
-   local v, verbose = makeVerbose(true, 'Llr:__init')
+   local v, verbose = makeVerbose(false, 'Llr:__init')
 
    verify(v,
           verbose,
@@ -53,6 +53,8 @@ function Llr:__init(xs, ys, kernelName)
    self._ys = ys
    self._kernelName = kernelName
    self._kernelSmoother = KernelSmoother()
+
+   v('self._xs:size()', self._xs:size())
 end
 
 --------------------------------------------------------------------------------
@@ -68,10 +70,15 @@ function Llr:estimate(query, lambda)
    --                  estimate is a number
    -- false, reason  : no estimate was produced
    --                  reason is a string
-   local v, verbose = makeVerbose(true, 'Llr:estimate')
+   local v, isVerbose = makeVerbose(true, 'Llr:estimate')
+   local debug = 1  -- torch.inverse(BTWB): U is always singular
+
+   if debug ~= 0 then
+      print('DEBUGGING Llr:estimate')
+   end
 
    verify(v,
-          verbose,
+          isVerbose,
           {{query, 'query', 'isTensor1D'},
            {lambda, 'lambda', 'isNumberPositive'}
           })
@@ -85,6 +92,11 @@ function Llr:estimate(query, lambda)
                                                 query, 
                                                 lambda)
    v('weights', weights)
+   if allZeroes(weights) then
+      return 
+         false, 
+         'weights all zeroes (probably no neighbors; if so, increase lambda)'
+   end
 
    local function augment(v)
       -- return 1D tensor (1, v)
@@ -104,39 +116,100 @@ function Llr:estimate(query, lambda)
       end
       return result
    end -- imbed
-   
+
+   local function printZeroRowsCols(t, name)
+      print('rows and cols that are all zeroes', name)
+      for d1 = 1, t:size(1) do
+         if allZeroes(t[d1]) then
+            print(string.format('%s[%d] = 0', name, d1))
+         end
+      end
+      for d2 = 1, t:size(2) do
+         if allZeroes(t[d2]) then
+            print(string.format('%s[:][%d] = 0', name, d2))
+         end
+      end  
+      print('end of rows and cols that are all zeros')
+   end -- printZeroRowsCols
+
+   if debug == 1 then
+      printZeroRowsCols(self._xs, 'self._xs')
+   end
+
    local nObs = self._xs:size(1)
    local nDims = self._xs:size(2)
    local dp1 = nDims + 1
    local B = torch.Tensor(nObs, dp1)
    for i = 1, nObs do
       B[i] = augment(self._xs[i])
+      if debug == 1 and allZeroes(self._xs[i]) then
+         print(string.format('self._xs[%d] = 0', i))
+      end
    end
-   v('B', B)
+   
+   --v('B', B)
+
+   if debug == 1 and false then
+      -- print row 8 of B
+      print('row 8 of B')
+      for d2 = 1, B:size(2) do
+         print(string.format('B[8][%d]=%f', d2, B[8][d2]))
+      end
+   end
 
    local BT = B:t()
    
-   local W = torch.Tensor(nObs, nObs):zero()
-   for i = 1, nObs do
-      W[i][i] = weights[i]
-   end
-   v('W', W)
+   v('nObs', nObs)
+   local W = DiagonalMatrix(weights)
 
    -- BTWB = B^t W B
-   local BTWB = BT * W * B  -- order does not matter for efficiency
-   v('BTWB', BTWB)
+   local BTWB = BT * (W:mul(B))
+   --v('BTWB', BTWB)
+   v('BTWB:size()', BTWB:size())
+   if debug == 1 then
+      printZeroRowsCols(BTWB, 'BTWB')
+   end
+   if debug == 1 and allZeroes(BTWB) then
+      v('BTWB is all zeroes')
+      halt()
+   end
+   if debug == 1 and false then
+      -- replace near zeroes with random values
+      -- this removes the singularity
+      local small = 1e-4
+      for d1 = 1, BTWB:size(1) do
+         for d2 = 1, BTWB:size(2) do
+            if math.abs(BTWB[d1][d2]) < small then
+               BTWB[d1][d2] = torch.random(0, 1) -- sample from N(0,1)
+               print('replaced d1,d2', d1, d2)
+            end
+         end
+      end
+   end
 
-   -- catch error
+   -- catch error in attempting to invert BTWB
+   if debug == 1 and false then
+      -- no problem with inverse of random matrix
+      BTWB = torch.rand(BTWB:size(1), BTWB:size(2))
+   end
    local ok, BTWBInv = pcall(torch.inverse, BTWB)
+   --v('BTWBInv', BTWBInv)
    if not ok then
-      print('Llr:estimate: error in call to torch.inverse')
-      print('error message = ' .. BTWBInv)
+      -- if the error message is "getrf: U(i,i) is 0, U is singular"
+      -- then LU factorization succeeded but U is exactly 0, so that
+      --      division by zero will occur if U is used to solve a
+      --      system of equations
+      -- ref: http://dlib.net/dlib/matrix/lapack/getrf.h.html
+      if debug == 1 then
+         print('Llr:estimate: error in call to torch.inverse')
+         print('error message = ' .. BTWBInv)
+         error(BTWBInv)
+      end
+      halt()
       return false, BTWBInv
    end
-   BTWBInv = torch.inverse(BTWB)
-   v('BTWBInv', BTWBInv)
 
-   if debug then
+   if false then
       -- break long multiplication into components for debugging
       v('imbed(augment(query))', imbed(augment(query)))
       local result1 = imbed(augment(query)) * BTWBInv 
@@ -145,7 +218,7 @@ function Llr:estimate(query, lambda)
       local result = result3 * self._ys
       v('debug result', result)
    end
-   local result = imbed(augment(query)) * BTWBInv * BT * W * self._ys
+   local result = imbed(augment(query)) * BTWBInv * BT * W:mul(self._ys)
    -- result is a 1D tensor
    v('result', result)
 
