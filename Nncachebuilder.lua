@@ -47,15 +47,20 @@ end -- __init
 -- PUBLIC CLASS METHODS
 --------------------------------------------------------------------------------
 
+function Nncachebuilder.format()
+   -- format used to serialize the cache
+   return 'ascii' -- 'binary' is faster
+end -- _format
+
 function Nncachebuilder.read(filePathPrefix)
    -- return an Nncachebuilder that was serialized to a file
    local v, isVerbose = makeVerbose(false, 'Nncachebuilder.read')
    verify(v, isVerbose,
           {{filePathPrefix, 'filePathPrefix', 'isString'}})
-   local inPath = filePathPrefix .. Nncachebuilder._mergedFileSuffix()
+   local inPath = filePathPrefix .. Nncachebuilder.mergedFileSuffix()
    v('inPath', inPath)
    local nncache = torch.load(inPath,
-                              Nncachebuilder._format())
+                              Nncachebuilder.format())
    affirm.isTable(nncache, 'nncache')
    -- can't figure out how to test more than the type
    -- It may be that there are fewer than 256 rows, as the original allXs
@@ -69,19 +74,16 @@ function Nncachebuilder.maxNeighbors()
    return 256
 end
 
+function Nncachebuilder.mergedFileSuffix()
+   -- end part of file name
+   return 'nncache-merged.txt'
+end -- mergedFileSuffix
+
 --------------------------------------------------------------------------------
 -- PRIVATE CLASS METHODS
 --------------------------------------------------------------------------------
 
-function Nncachebuilder._format()
-   -- format used to serialize the cache
-   return 'ascii' -- 'binary' is faster
-end -- _format
 
-function Nncachebuilder._mergedFileSuffix()
-   -- end part of file name
-   return 'nncache-merged.txt'
-end -- _mergedFileSuffix
 
 function Nncachebuilder._shardFileSuffix(n)
    -- end part of file name
@@ -151,7 +153,7 @@ function Nncachebuilder:createShard(shardNumber, filePathPrefix)
    local filePath = 
       filePathPrefix .. Nncachebuilder._shardFileSuffix(shardNumber)
    v('filePath', filePath)
-   torch.save(filePath, cache, Nncachebuilder._format())
+   torch.save(filePath, cache, Nncachebuilder.format())
    return filePath
 end -- createShard
 
@@ -170,7 +172,7 @@ function Nncachebuilder.mergeShards(nShards, filePathPrefix)
    for n = 1, nShards do
       local path = filePathPrefix .. Nncachebuilder._shardFileSuffix(n)
       print('reading shard cache file ', path)
-      local shard = torch.load(path, Nncachebuilder._format())
+      local shard = torch.load(path, Nncachebuilder.format())
       affirm.isTable(shard, 'shard')
       local countShard = 0
       for key, value in pairs(shard) do
@@ -183,9 +185,9 @@ function Nncachebuilder.mergeShards(nShards, filePathPrefix)
    end
    print('number of records inserted from all shards', countAll)
 
-   local mergedFilePath = filePathPrefix .. Nncachebuilder._mergedFileSuffix()
+   local mergedFilePath = filePathPrefix .. Nncachebuilder.mergedFileSuffix()
    print('writing merged cache file', mergedFilePath)
-   torch.save(mergedFilePath, cache, Nncachebuilder._format())
+   torch.save(mergedFilePath, cache, Nncachebuilder.format())
    return countAll, mergedFilePath
 end -- mergeShards
 
