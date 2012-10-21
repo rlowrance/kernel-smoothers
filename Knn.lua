@@ -364,7 +364,7 @@ function KnnSmootherKwavg:__init(allXs, allYs, selected, cache)
 end -- KnnSmootherKwavg:__init()
 
 function KnnSmootherKwavg:estimate(obsIndex, k)
-   local v, isVerbose = makeVerbose(true, 'KnnSmootherKwavg:estimate')
+   local v, isVerbose = makeVerbose(false, 'KnnSmootherKwavg:estimate')
    verify(v, isVerbose,
           {{obsIndex, 'obsIndex', 'isIntegerPositive'},
            {k, 'k', 'isIntegerPositive'}})
