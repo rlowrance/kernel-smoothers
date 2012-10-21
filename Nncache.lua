@@ -10,10 +10,17 @@ if false then
    nnc:setLine(obsIndex, tensor1D)
    tensor1D = nnc:getLine(obsIndex)  -- may return null
 
+   -- apply a function to each key-value pair
+   local function f(key,value)
+   end
+   
+   nnc:apply(f)
+
    -- saving to a file and restoring from one
    -- the suffix is determined by the class Nncachebuilder
    nnc:save(filePath)
    nnc = nnc.load(filePath)
+   nnc = nnc.loadUsingPrefix(filePathPrefix)
 end
 
 
@@ -34,7 +41,7 @@ end
 
 function Nncache.load(filePath)
    -- return an nnc; error if there is no saved Nncache at the filePath
-   local v, isVerbose = makeVerbose(false, 'Nncache.read')
+   local v, isVerbose = makeVerbose(true, 'Nncache.read')
    verify(v, isVerbose,
           {{filePath, 'filePath', 'isString'}})
    local nnc = torch.load(filePath,
