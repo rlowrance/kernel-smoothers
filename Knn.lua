@@ -104,19 +104,21 @@ end -- Knn.kernels
 
 
 
-function Knn.nearest(xs, query)
+function Knn.nearestQuery(xs, query)
    -- find nearest observations to a query
    -- RETURN
    -- sortedDistances : 1D Tensor 
+   --                   distances of each xs from query
    -- sortedIndices   : 1D Tensor 
-   local v, isVerbose = makeVerbose(false, 'Knn.nearest')
+   --                   indices that sort the distances
+   local v, isVerbose = makeVerbose(false, 'Knn.nearestQuery')
    verify(v, isVerbose,
           {{xs, 'xs', 'isTensor2D'},
            {query, 'query', 'isTensor1D'}})
    local distances = Knn.euclideanDistances(xs, query)
    local sortedDistances, sortedIndices = torch.sort(distances)
    return sortedDistances, sortedIndices
-end -- Knn.example
+end -- Knn.nearestQuery
 
 
 --------------------------------------------------------------------------------
@@ -218,7 +220,7 @@ function KnnEstimatorAvg:estimate(query, k)
            {k, 'k', 'isIntegerPositive'}})
 
    local sortedDistances, sortedIndices = 
-      Knn.nearest(self._xs, query)
+      Knn.nearestQuery(self._xs, query)
 
    local sum = 0
    for neighborIndex = 1, k do
@@ -248,7 +250,7 @@ function KnnEstimatorKwavg:estimate(query, k)
            {k, 'k', 'isIntegerPositive'}})
 
    local sortedDistances, sortedIndices =
-      Knn.nearest(self._xs, query)
+      Knn.nearestQuery(self._xs, query)
 
    local nObs = sortedDistances:size(1)
    assert(k <= nObs)
@@ -374,41 +376,82 @@ function KnnSmootherKwavg:estimate(obsIndex, k)
    v('nearestIndices', nearestIndices)
    v('self._selected', self._selected)
    
-   -- FIX: we don't know the xs
-   local sortedDistances, sortedIndices = Knn.nearest(self._xs, query)
-   local lambda = sortedDistances[k]
-   if lambda == 0 then
-      return false, 'kth nearest observation has distance 0'
-   end
+   local sortedDistances, sortedIndices = 
+      Knn.nearestQuery(self._allXs, 
+                       self._allXs[obsIndex]:clone())
+   v('sortedDistances', sortedDistances)
+   v('sortedIndices', sortedIndices)
 
-   local kernels = Knn.kernels(sortedDistances, lambda)
+   local function permuteTensorElements(tensor, permutation)
+      -- put self._selected in same order as sortedIndices
+      -- ARGS:
+      -- tensor : 1D Tensor
+      -- permutation : 1D Tensor containing each index 
+      -- RETURNS
+      -- permuted: 1D Tensor such that permutate[i] = tensor[permutation[i]]
+      -- NOTE: this operation should be build into torch.Tensor
+      -- TODO: move to external
+      local n = tensor:size(1)
+      assert(permutation:size(1) == n)
+      local permuted = torch.Tensor(n)
+      for i = 1, n do
+         permuted[i] = tensor[sortedIndices[i]]
+      end
+      return permuted
+   end -- permuteTensorElements
 
-   -- determine kernel-weighted average of k nearest selected neighbors
-   -- NOTE: this can fail if we get unlucky
-   -- specifically, if k > (256 - 256/nfolds)
-   -- where 256 = Nncachebuild._maxNeighbors()
-   -- If so, increase value of Nncachebuilder._maxNeighbors() and rerun
-   local sumYs = 0
-   local sumKernels = 0
-   local used = 0
-   for neighborIndex = 1, nearestIndices:size(1) do
-      local obsIndex = sortedIndices[neighborIndex]
-      v('obsIndex', obsIndex)
-      if self._selected[obsIndex] == 1 then
-         used = used + 1
-         v('used obsIndex', obsIndex)
-         local kernel = kernels[neighborIndex]
-         sumYs = sumYs + self._allYs[obsIndex] * kernel
-         sumKernels = sumKernels + kernel
-         if used == k then 
+   local selected = permuteTensorElements(self._selected, sortedIndices)
+   local selectedDistances = torch.cmul(sortedDistances, selected)
+   -- set lambda to distance of the k-th nearest neighbor
+   local lambda
+   local count = 0
+   for i = 1, sortedDistances:size(1) do
+      if selected[i] == 1 then
+         count = count + 1
+         if count == k then
+            lambda = sortedDistances[i]
             break
          end
       end
    end
-   assert(used == k,
-          'not enough pre-computed neighbor indices in cache' ..
-          '\nnearestIndices:size(1) = ' .. tostring(nearestIndices:size(1)))
-
-   local result = sumYs / sumKernels
-   return true, result
+   v('lambda', lambda)
+   if lambda == 0 then
+      -- determine kernel-weighted average of k nearest selected neighbors
+      -- NOTE: this can fail if we get unlucky
+      -- specifically, if k > (256 - 256/nfolds)
+      -- where 256 = Nncachebuild._maxNeighbors()
+      -- If so, increase value of Nncachebuilder._maxNeighbors() and rerun
+      
+      return false, 'kth nearest observation has distance 0'
+   end
+   local t = torch.cmul(selected, selectedDistances / lambda)
+   v('t', t)
+   local ones = torch.Tensor(t:size(1)):fill(1)
+   local w = torch.cmul(selected,
+                        torch.cmul(torch.le(t, ones):type('torch.DoubleTensor'),
+                                   ones - torch.cmul(t, t)) * 0.75)
+   v('torch.le(t, ones):type(...)', 
+     torch.le(t, ones):type('torch.DoubleTensor'))
+   v('ones - torch.cmul(t, t)', ones - torch.cmul(t, t))
+   v('w', w) 
+   local permutedYs = permuteTensorElements(self._allYs, sortedIndices)
+   local sumWYs = torch.sum(torch.cmul(w, permutedYs))
+   local estimate = sumWYs / torch.sum(w)
+   if true then
+      v('selected in sorted order', selected)
+      v('selectedDistances', selectedDistances)
+      v('cmul', torch.cmul(sortedDistances, selected))
+      v('lambda', lambda)
+      v('t', t)
+      v('ones', ones)
+      v('ones - cmul(t,t)', ones - torch.cmul(t,t))
+      v('w', w)
+      v('self._allYs', self._allYs)
+      v('sumWYs', sumWYs)
+      v('sum w', torch.sum(w))
+      v('estimate', estimate)
+      --halt()
+   end
+   
+   return true, estimate
 end -- KnnSmootherKwavg:estimate()
