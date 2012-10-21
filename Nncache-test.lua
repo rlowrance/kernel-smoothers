@@ -32,6 +32,20 @@ function testElements(nnc)
    tester:assert(results3 == nil)
 end -- nnc
 
+function test.apply()
+   local nnc = makeNncache()
+   local function f(key, value)
+      tester:assert(key == 1 or key == 2)
+      if key == 1 then
+         tester:assert(1, value[1])
+      elseif key == 2 then
+         tester:asserteq(2, value[2])
+      else
+         tester:assert(false, 'bad value = ' .. tostring(value))
+      end
+   end
+end -- apply
+
 function test.get()
    local nnc = makeNncache()
    testElements(nnc)
@@ -53,11 +67,11 @@ end -- set
 function test.saveLoad()
    local v = makeVerbose(false, 'test.saveLoad')
    local nnc = makeNncache()
-   local prefix = '/tmp/Nncache-test-'
-   nnc:save(prefix)
+   local filePath = '/tmp/Nncache-test.txt'
+   nnc:save(filePath)
 
    nnc = nil
-   fromDisk = Nncache.load(prefix)
+   fromDisk = Nncache.load(filePath)
    v('fromDisk', fromDisk)
    testElements(fromDisk)
 end -- writeRead

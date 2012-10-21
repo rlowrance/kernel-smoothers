@@ -9,7 +9,7 @@ tester = Tester()
 test = {}
 
 function test.cache()
-   local v = makeVerbose(false, 'test.cache')
+   local v, isVerbose = makeVerbose(false, 'test.cache')
    local nObs = 10
    local nDims = 1
    local xs = torch.Tensor(nObs, nDims)
@@ -22,30 +22,31 @@ function test.cache()
    local filePathPrefix = '/tmp/Knn-test-cache'
    nncb:createShard(1, filePathPrefix)
    Nncachebuilder.mergeShards(nShards, filePathPrefix)
-   local cache = Nncachebuilder.read(filePathPrefix)
+   local cache = Nncache.loadUsingPrefix(filePathPrefix)
    v('cache', cache)
    if isVerbose then
-      for key, value in pairs(cache) do
+      local function p(key,value)
          print(string.format('cache[%d] = %s', key, tostring(value)))
-      end
+      end -- p
+      cache:apply(p)
    end
 
    -- first element should be the obs index
    for i = 1, 10 do
-      tester:asserteq(i, cache[i][1])
+      tester:asserteq(i, cache:getLine(i)[1])
    end
 
    -- test last element in cache line
-   tester:asserteq(10, cache[1][10])
-   tester:asserteq(10, cache[2][10])
-   tester:asserteq(10, cache[3][10])
-   tester:asserteq(10, cache[4][10])
-   tester:asserteq(10, cache[5][10])
-   tester:asserteq(1, cache[6][10])
-   tester:asserteq(1, cache[7][10])
-   tester:asserteq(1, cache[8][10])
-   tester:asserteq(1, cache[9][10])
-   tester:asserteq(1, cache[10][10])
+   tester:asserteq(10, cache:getLine(1)[10])
+   tester:asserteq(10, cache:getLine(2)[10])
+   tester:asserteq(10, cache:getLine(3)[10])
+   tester:asserteq(10, cache:getLine(4)[10])
+   tester:asserteq(10, cache:getLine(5)[10])
+   tester:asserteq(1, cache:getLine(6)[10])
+   tester:asserteq(1, cache:getLine(7)[10])
+   tester:asserteq(1, cache:getLine(8)[10])
+   tester:asserteq(1, cache:getLine(9)[10])
+   tester:asserteq(1, cache:getLine(10)[10])
 
 end -- test.cache
 function test.integrated()
@@ -65,19 +66,20 @@ function test.integrated()
 
    Nncachebuilder.mergeShards(nShards, filePathPrefix)
 
-   local cache = Nncachebuilder.read(filePathPrefix)
+   local cache = Nncache.loadUsingPrefix(filePathPrefix)
    --print('cache', cache)
    --print('type(cache)', type(cache))
    v('cache', cache)
    tester:assert(check.isTable(cache))
    local count = 0
-   for key, value in pairs(cache) do
+   local function examine(key, value)
       count = count + 1
       tester:assert(check.isIntegerPositive(key))
       tester:assert(check.isTensor1D(value))
       tester:asserteq(math.min(nObs,256), value:size(1))
       tester:asserteq(key, value[1]) -- obsIndex always nearest to itself
    end
+   cache:apply(examine)
    tester:asserteq(nObs, count)
 end -- test.integrated
 

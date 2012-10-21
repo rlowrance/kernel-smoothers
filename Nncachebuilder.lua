@@ -11,14 +11,17 @@ if false then
    -- create serialized cache object int file <prefix>nncache-merged.txt
    Nncachebulder.mergeShards(nShards, 'filePathPrefix')
 
+   -- ILLUSTRATIVE USE
+
    -- read the serialized merged cache from file system
-   cache = Nncachebuilder.read('filePathPrefix') 
+   cache = Nncache.load('filePathPrefix') 
    -- now cache[27] is a 1D tensor of the sorted indices closest to obs # 27
    -- in the original xs
    
    -- use the cache to smooth values
    selected = setSelected() -- to selected observations in Xs and Ys
-   knnSmoother = KnnSmoother(allXs, allYs, selected, cache) -- use original Xs!
+   -- use the original allXs to create smoothed estimates
+   knnSmoother = KnnSmoother(allXs, allYs, selected, cache)
    estimate = knnSmoother:estimate(queryIndex, k)
 end
 
@@ -38,7 +41,7 @@ function Nncachebuilder:__init(allXs, nShards)
           'more than 2^31 - 1 rows in the tensor')
    self._allXs = allXs
    self._nShards = nShards
-   self._cache = nil  -- _cache[index]=<1D tensor of obsIndices in tensor2D>
+   self._cache = Nncache()
 
    self._kernelSmoother = KernelSmoother()
 end -- __init
@@ -51,23 +54,6 @@ function Nncachebuilder.format()
    -- format used to serialize the cache
    return 'ascii' -- 'binary' is faster
 end -- _format
-
-function Nncachebuilder.read(filePathPrefix)
-   -- return an Nncachebuilder that was serialized to a file
-   local v, isVerbose = makeVerbose(false, 'Nncachebuilder.read')
-   verify(v, isVerbose,
-          {{filePathPrefix, 'filePathPrefix', 'isString'}})
-   local inPath = filePathPrefix .. Nncachebuilder.mergedFileSuffix()
-   v('inPath', inPath)
-   local nncache = torch.load(inPath,
-                              Nncachebuilder.format())
-   affirm.isTable(nncache, 'nncache')
-   -- can't figure out how to test more than the type
-   -- It may be that there are fewer than 256 rows, as the original allXs
-   -- may only have a few rows.
-   v('nncache', nncache)
-   return nncache
-end -- read
 
 function Nncachebuilder.maxNeighbors()
    -- number of neighbor indices stored; size of cache[index]
@@ -83,20 +69,19 @@ end -- mergedFileSuffix
 -- PRIVATE CLASS METHODS
 --------------------------------------------------------------------------------
 
-
-
-function Nncachebuilder._shardFileSuffix(n)
-   -- end part of file name
-   return string.format('nncache-shard-%d.txt', n)
-end -- _shardFileSuffix
+function Nncachebuilder._shardFilePath(filePathPrefix, shardNumber)
+   return filePathPrefix .. string.format('shard-%d.txt', shardNumber)
+end -- _shardFilePath
 
 --------------------------------------------------------------------------------
 -- PUBLIC INSTANCE METHODS
 --------------------------------------------------------------------------------
 
 function Nncachebuilder:createShard(shardNumber, filePathPrefix)
-   -- return file path where cache data were written
-   local v, isVerbose = makeVerbose(true, 'createShard')
+   -- create an Nncache holding all the nearest neighbors in the shard
+   -- write this Nncache to disk
+   -- return file path where written
+   local v, isVerbose = makeVerbose(false, 'createShard')
    verify(v, isVerbose,
           {{shardNumber, 'shardNumber', 'isIntegerPositive'},
            {filePathPrefix, 'filePathPrefix', 'isString'}})
@@ -104,7 +89,7 @@ function Nncachebuilder:createShard(shardNumber, filePathPrefix)
    assert(shardNumber <= self._nShards)
 
    local tc = TimerCpu()
-   local cache = {}
+   local cache = Nncache()
    local count = 0
    local shard = 0
    local roughCount = self._allXs:size(1) / self._nShards
@@ -126,7 +111,7 @@ function Nncachebuilder:createShard(shardNumber, filePathPrefix)
          for i = 1, n do
             firstIndices[i] = allIndices[i]
          end
-         cache[obsIndex] = firstIndices
+         cache:setLine(obsIndex, firstIndices)
          count = count + 1
          if false then 
             v('count', count)
@@ -150,10 +135,9 @@ function Nncachebuilder:createShard(shardNumber, filePathPrefix)
    -- halt()
 
    -- write by serializing
-   local filePath = 
-      filePathPrefix .. Nncachebuilder._shardFileSuffix(shardNumber)
+   local filePath = Nncachebuilder._shardFilePath(filePathPrefix, shardNumber)
    v('filePath', filePath)
-   torch.save(filePath, cache, Nncachebuilder.format())
+   cache:save(filePath)
    return filePath
 end -- createShard
 
@@ -167,20 +151,21 @@ function Nncachebuilder.mergeShards(nShards, filePathPrefix)
           {{nShards, 'nShards', 'isIntegerPositive'},
            {filePathPrefix, 'filePathPrefix', 'isString'}})
 
-   local cache = {}
+   local cache = Nncache()
    local countAll = 0
    for n = 1, nShards do
-      local path = filePathPrefix .. Nncachebuilder._shardFileSuffix(n)
+      local path = Nncachebuilder._shardFilePath(filePathPrefix, n)
       print('reading shard cache file ', path)
-      local shard = torch.load(path, Nncachebuilder.format())
-      affirm.isTable(shard, 'shard')
+      local shard = Nncache.load(path)
+      affirm.isTable(shard, 'Nncache')
+
+      -- insert all shard elements into the cache
       local countShard = 0
-      for key, value in pairs(shard) do
+      local function insert(key, value)
+         cache:setLine(key, value)
          countShard = countShard + 1
-         countAll = countAll + 1
-         assert(cache[key] == nil)  -- no duplicates across shards
-         cache[key] = value
       end
+      shard:apply(insert)
       print('number records inserted from shard', countShard)
    end
    print('number of records inserted from all shards', countAll)
@@ -191,10 +176,3 @@ function Nncachebuilder.mergeShards(nShards, filePathPrefix)
    return countAll, mergedFilePath
 end -- mergeShards
 
---------------------------------------------------------------------------------
--- PRIVATE INSTANCE METHODS
---------------------------------------------------------------------------------
-
-function Nncachebuilder:_shardFilePath(filePathPrefix, shardNumber)
-   return filePathPrefix .. string.format('shard-%d.txt', shardNumber)
-end -- _shardFilePath

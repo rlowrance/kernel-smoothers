@@ -12,8 +12,8 @@ if false then
 
    -- saving to a file and restoring from one
    -- the suffix is determined by the class Nncachebuilder
-   nnc:save(filePathPrefix)
-   nnc = nnc.load(filePathPrefix)
+   nnc:save(filePath)
+   nnc = nnc.load(filePath)
 end
 
 
@@ -32,14 +32,12 @@ end
 -- PUBLIC CLASS METHODS
 --------------------------------------------------------------------------------
 
-function Nncache.load(filePathPrefix)
-   -- return an nnc; error if there is no saved Nncache using the prefix
+function Nncache.load(filePath)
+   -- return an nnc; error if there is no saved Nncache at the filePath
    local v, isVerbose = makeVerbose(false, 'Nncache.read')
    verify(v, isVerbose,
-          {{filePathPrefix, 'filePathPrefix', 'isString'}})
-   local inPath = Nncache._filePath(filePathPrefix)
-   v('inPath', inPath)
-   local nnc = torch.load(inPath,
+          {{filePath, 'filePath', 'isString'}})
+   local nnc = torch.load(filePath,
                           Nncachebuilder.format())
    v('nnc', nnc)
    v('typename', torch.typename(nnc))
@@ -49,6 +47,10 @@ function Nncache.load(filePathPrefix)
    -- original allXs may have had fewer than 256 observations
    return nnc
 end -- read
+
+function Nncache.loadUsingPrefix(filePathPrefix)
+   return Nncache.load(Nncache._filePath(filePathPrefix))
+end -- loadUsingPrefix
 
 --------------------------------------------------------------------------------
 -- PRIVATE CLASS METHODS
@@ -62,6 +64,13 @@ end -- _filePath
 -- PUBLIC INSTANCE METHODS
 --------------------------------------------------------------------------------
 
+function Nncache:apply(f)
+   -- apply a function to each key-value pair
+   for key, value in pairs(self._table) do
+      f(key, value)
+   end
+end -- apply
+                       
 function Nncache:getLine(obsIndex)
    -- return line at key or null
    local v, isVerbose = makeVerbose(false, 'Nncache:getline')
@@ -99,7 +108,7 @@ function Nncache:setLine(obsIndex, values)
    self._table[obsIndex] = values
 end -- setLine
 
-function Nncache:save(filePathPrefix)
+function Nncache:save(filePath)
    -- write to disk by serializing
    -- NOTE: if the name of this method were 'write', then the call below
    -- to torch.save would call this function recursively. Hence the name
@@ -107,9 +116,8 @@ function Nncache:save(filePathPrefix)
    local v, isVerbose = makeVerbose(false, 'Nncache:write')
    v('self', self)
    verify(v, isVerbose,
-          {{filePathPrefix, 'filePathPrefix', 'isString'}})
+          {{filePath, 'filePath', 'isString'}})
 
-   local filePath = Nncache._filePath(filePathPrefix)
    v('filePath', filePath)
    v('Nncachebuilder.format()', Nncachebuilder.format())
    torch.save(filePath, self, Nncachebuilder.format())
