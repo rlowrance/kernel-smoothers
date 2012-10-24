@@ -10,6 +10,7 @@ test = {}
 
 function test.cache()
    local v, isVerbose = makeVerbose(false, 'test.cache')
+   local chatty = isVerbose
    local nObs = 10
    local nDims = 1
    local xs = torch.Tensor(nObs, nDims)
@@ -20,9 +21,9 @@ function test.cache()
    local nShards = 1
    local nncb = Nncachebuilder(xs, nShards)
    local filePathPrefix = '/tmp/Knn-test-cache'
-   nncb:createShard(1, filePathPrefix)
-   Nncachebuilder.mergeShards(nShards, filePathPrefix)
-   local cache = Nncache.loadUsingPrefix(filePathPrefix)
+   nncb:createShard(1, filePathPrefix, chatty)
+   Nncachebuilder.mergeShards(nShards, filePathPrefix, chatty)
+   local cache = Nncache.loadUsingPrefix(filePathPrefix, chatty)
    v('cache', cache)
    if isVerbose then
       local function p(key,value)
@@ -50,7 +51,9 @@ function test.cache()
 
 end -- test.cache
 function test.integrated()
-   local v = makeVerbose(false, 'test.integrated')
+   local v, isVerbose = makeVerbose(false, 'test.integrated')
+   local chatty = isVerbose
+   v('chatty', chatty)
    local nObs = 300
    local nDims = 10
    local xs = torch.rand(nObs, nDims)
@@ -61,12 +64,12 @@ function test.integrated()
 
    local filePathPrefix = '/tmp/Nncache-test'
    for n = 1, nShards do
-      nnc:createShard(n, filePathPrefix)
+      nnc:createShard(n, filePathPrefix, chatty)
    end
 
-   Nncachebuilder.mergeShards(nShards, filePathPrefix)
+   Nncachebuilder.mergeShards(nShards, filePathPrefix, chatty)
 
-   local cache = Nncache.loadUsingPrefix(filePathPrefix)
+   local cache = Nncache.loadUsingPrefix(filePathPrefix, chatty)
    --print('cache', cache)
    --print('type(cache)', type(cache))
    v('cache', cache)

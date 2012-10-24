@@ -16,7 +16,7 @@ if false then
    
    nnc:apply(f)
 
-   -- saving to a file and restoring from one
+    -- saving to a file and restoring from one
    -- the suffix is determined by the class Nncachebuilder
    nnc:save(filePath)
    nnc = nnc.load(filePath)
@@ -41,7 +41,7 @@ end
 
 function Nncache.load(filePath)
    -- return an nnc; error if there is no saved Nncache at the filePath
-   local v, isVerbose = makeVerbose(true, 'Nncache.read')
+   local v, isVerbose = makeVerbose(false, 'Nncache.read')
    verify(v, isVerbose,
           {{filePath, 'filePath', 'isString'}})
    local nnc = torch.load(filePath,

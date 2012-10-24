@@ -1,4 +1,11 @@
 # allTests.sh run all unit tests
-torch KernelSmoother-test.lua
-torch Knn-test.lua
-torch Kwavg-test.lua
+torch Estimator-test.lua
+torch EstimatorAvg-test.lua
+torch EstimatorKwavg-test.lua
+torch Nn-test.lua
+torch Smoother-test.lua
+torch SmootherAvg-test.lua
+torch SmootherKwavg-test.lua
+
+
+

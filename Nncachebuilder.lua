@@ -43,7 +43,6 @@ function Nncachebuilder:__init(allXs, nShards)
    self._nShards = nShards
    self._cache = Nncache()
 
-   self._kernelSmoother = KernelSmoother()
 end -- __init
 
 --------------------------------------------------------------------------------
@@ -77,7 +76,7 @@ end -- _shardFilePath
 -- PUBLIC INSTANCE METHODS
 --------------------------------------------------------------------------------
 
-function Nncachebuilder:createShard(shardNumber, filePathPrefix)
+function Nncachebuilder:createShard(shardNumber, filePathPrefix, chatty)
    -- create an Nncache holding all the nearest neighbors in the shard
    -- write this Nncache to disk
    -- return file path where written
@@ -85,6 +84,13 @@ function Nncachebuilder:createShard(shardNumber, filePathPrefix)
    verify(v, isVerbose,
           {{shardNumber, 'shardNumber', 'isIntegerPositive'},
            {filePathPrefix, 'filePathPrefix', 'isString'}})
+   -- set default for chatty [true]
+   v('chatty', chatty)
+   if chatty == nil then
+      chatty = true
+   end
+   v('chatty', chatty)
+   
    v('self', self)
    assert(shardNumber <= self._nShards)
 
@@ -102,8 +108,8 @@ function Nncachebuilder:createShard(shardNumber, filePathPrefix)
          -- observation in shard, so create its neighbors indices
          local query = self._allXs[obsIndex]:clone()
          collectgarbage()
-         local _, allIndices = KernelSmoother.nearest(self._allXs,
-                                                      query)
+         local _, allIndices = Nn.nearest(self._allXs,
+                                          query)
          -- NOTE: creating a view of the storage seems like a good idea
          -- but fails when the tensor is serialized out
          local n = math.min(Nncachebuilder.maxNeighbors(), self._allXs:size(1))
@@ -118,7 +124,7 @@ function Nncachebuilder:createShard(shardNumber, filePathPrefix)
             v('obsIndex', obsIndex)
             v('firstIndices', firstIndices)
          end
-         if count % 10000 == 1 then
+         if count % 10000 == 1 and chatty then
             local rate = tc:cumSeconds() / count
             print(string.format(
                      'Nncachebuilder:createShard: create %d indices' ..
@@ -142,7 +148,7 @@ function Nncachebuilder:createShard(shardNumber, filePathPrefix)
 end -- createShard
 
 
-function Nncachebuilder.mergeShards(nShards, filePathPrefix)
+function Nncachebuilder.mergeShards(nShards, filePathPrefix, chatty)
    -- RETURN
    -- number of records in merged file
    -- file path where merged cache data were written
@@ -151,11 +157,18 @@ function Nncachebuilder.mergeShards(nShards, filePathPrefix)
           {{nShards, 'nShards', 'isIntegerPositive'},
            {filePathPrefix, 'filePathPrefix', 'isString'}})
 
+   -- set default for chatty [true]
+   if chatty == nil then
+      chatty = true
+   end
+
    local cache = Nncache()
    local countAll = 0
    for n = 1, nShards do
       local path = Nncachebuilder._shardFilePath(filePathPrefix, n)
-      print('reading shard cache file ', path)
+      if chatty then
+         print('reading shard cache file ', path)
+      end
       local shard = Nncache.load(path)
       affirm.isTable(shard, 'Nncache')
 
@@ -166,12 +179,18 @@ function Nncachebuilder.mergeShards(nShards, filePathPrefix)
          countShard = countShard + 1
       end
       shard:apply(insert)
-      print('number records inserted from shard', countShard)
+      if chatty then
+         print('number records inserted from shard', countShard)
+      end
    end
-   print('number of records inserted from all shards', countAll)
+   if chatty then
+      print('number of records inserted from all shards', countAll)
+   end
 
    local mergedFilePath = filePathPrefix .. Nncachebuilder.mergedFileSuffix()
-   print('writing merged cache file', mergedFilePath)
+   if chatty then 
+      print('writing merged cache file', mergedFilePath)
+   end
    torch.save(mergedFilePath, cache, Nncachebuilder.format())
    return countAll, mergedFilePath
 end -- mergeShards
