@@ -41,12 +41,13 @@ end
 
 function Nncache.load(filePath)
    -- return an nnc; error if there is no saved Nncache at the filePath
-   local v, isVerbose = makeVerbose(false, 'Nncache.read')
+   local v, isVerbose = makeVerbose(true, 'Nncache.load')
    verify(v, isVerbose,
           {{filePath, 'filePath', 'isString'}})
    local nnc = torch.load(filePath,
                           Nncachebuilder.format())
-   v('nnc', nnc)
+   --v('nnc', nnc)
+   v('nnc:size()', nnc:size())
    v('typename', torch.typename(nnc))
    assert(torch.typename(nnc) == 'Nncache',
           'bad typename  = ' .. tostring(torch.typename(nnc)))
