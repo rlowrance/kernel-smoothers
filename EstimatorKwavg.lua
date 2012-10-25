@@ -11,9 +11,6 @@ if false then
 
    -- when estimating a brand new query and hence not using the cache
    ok, estimate = ekwavg:estimate(query, k)
-
-   -- when smoothing an existing query and hence using the cached indices:
-   ok, estimate = ekwavg:estimate(query, k, visible, sortedNeighborIndices)
 end -- API overview
 
 
@@ -23,10 +20,12 @@ end -- API overview
 
 local _, parent = torch.class('EstimatorKwavg', 'Estimator')
 
-function EstimatorKwavg:__init(xs, ys)
+function EstimatorKwavg:__init(xs, ys, kernelName)
    local v, isVerbose = makeVerbose(true, 'EstimatorKwavg:__init')
+   assert(kernelName == 'epanechnikov quadratic',
+          'only kernel supported is epanechnikov quadratic')   
    parent.__init(self, xs, ys)
-end -- EstimatorKwavg:__init()
+end -- __init()
 
 --------------------------------------------------------------------------------
 -- PUBLIC METHODS
@@ -35,8 +34,8 @@ end -- EstimatorKwavg:__init()
 function EstimatorKwavg:estimate(query, k)
    -- estimate y for a new query point using the Euclidean distance
    -- ARGS:
-   -- query         : 1D Tensor
-   -- k             : integer > 0, number of neighbors
+   -- query          : 1D Tensor
+   -- k              : integer > 0, number of neighbors
    -- RESULTS:
    -- true, estimate : estimate is the estimate for the query
    --                  estimate is a number

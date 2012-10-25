@@ -18,13 +18,15 @@ end -- API overview
 
 local _, parent = torch.class('SmootherKwavg', 'Smoother')
 
-function SmootherKwavg:__init(allXs, allYs, visible, nncache)
+function SmootherKwavg:__init(allXs, allYs, visible, nncache, kernelName)
    local v, isVerbose = makeVerbose(false, 'SmootherKwavg:__init')
    verify(v, isVerbose,
           {{allXs, 'allXs', 'isTensor2D'},
            {allYs, 'allYs', 'isTensor1D'},
            {visible, 'visible', 'isTensor1D'},
            {nncache, 'nncache', 'isTable'}})
+   assert(kernelName == 'epanechnikov quadratic',
+          'only kernel supported is epanechnikov quadratic')
    assert(torch.typename(nncache) == 'Nncache')
    parent.__init(self, allXs, allYs, visible, nncache)
    v('self', self)
@@ -36,7 +38,7 @@ end -- __init()
 --------------------------------------------------------------------------------
 
 function SmootherKwavg:estimate(obsIndex, k)
-   local v, isVerbose = makeVerbose(false, 'SmootherKwavg:estimate')
+   local v, isVerbose = makeVerbose(true, 'SmootherKwavg:estimate')
    verify(v, isVerbose,
           {{obsIndex, 'obsIndex', 'isIntegerPositive'},
            {k, 'k', 'isIntegerPositive'}})
@@ -64,7 +66,7 @@ function SmootherKwavg:estimate(obsIndex, k)
          end
       end
    end
-   v('labmda', lambda)
+   v('lambda', lambda)
    v('distances', distances)
 
    local weights = Nn.weights(distances, lambda)
