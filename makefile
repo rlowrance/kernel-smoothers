@@ -4,15 +4,15 @@
 # fail if any test fails
 .PHONY: check
 check:
-	torch Estimator-test.lua
-	torch EstimatorAvg-test.lua
-	torch EstimatorKwavg-test.lua
-	torch EstimatorLlr-test.lua
-	torch Nn-test.lua
-	torch Smoother-test.lua
-	torch SmootherAvg-test.lua
-	torch SmootherKwavg-test.lua
-	torch SmootherLlr-test.lua
+	torch NnwEstimator-test.lua
+	torch NnwEstimatorAvg-test.lua
+	torch NnwEstimatorKwavg-test.lua
+	torch NnwEstimatorLlr-test.lua
+	torch Nnw-test.lua
+	torch NnwSmoother-test.lua
+	torch NnwSmootherAvg-test.lua
+	torch NnwSmootherKwavg-test.lua
+	torch NnwSmootherLlr-test.lua
 
 
 

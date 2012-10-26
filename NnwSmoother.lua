@@ -1,5 +1,5 @@
--- Smoother.lua
--- parent class for all Smoother classes
+-- NnwSmoother.lua
+-- parent class for all NnwSmoother classes
 
 require 'affirm'
 require 'makeVerbose'
@@ -7,7 +7,7 @@ require 'verify'
 
 -- API overview
 if false then
-   s = Smoother(allXs, allYs, visible, cache)
+   s = NnwSmoother(allXs, allYs, visible, cache)
 
    -- all methods are supplied by a subclass
 end -- API overview
@@ -16,9 +16,9 @@ end -- API overview
 -- CONSTRUCTION
 --------------------------------------------------------------------------------
 
-torch.class('Smoother')
+torch.class('NnwSmoother')
 
-function Smoother:__init(allXs, allYs, visible, nncache) 
+function NnwSmoother:__init(allXs, allYs, visible, nncache) 
    -- ARGS:
    -- xs            : 2D Tensor
    --                 the i-th input sample is xs[i]
@@ -31,7 +31,7 @@ function Smoother:__init(allXs, allYs, visible, nncache)
    --                 nncache[obsIndex] = 1D tensor of indices in allXs of
    --                 256 nearest neighbors to allXs[obsIndex]
 
-   local v, isVerbose = makeVerbose(false, 'Smoother:__init')
+   local v, isVerbose = makeVerbose(false, 'NnwSmoother:__init')
    verify(v, 
           isVerbose,
           {{allXs, 'allXs', 'isTensor2D'},
@@ -57,15 +57,15 @@ function Smoother:__init(allXs, allYs, visible, nncache)
    self._nncache = nncache
 
    self._kMax = Nncachebuilder.maxNeighbors()
-end -- NnSmoother:__init()
+end -- NnNnwSmoother:__init()
 
 --------------------------------------------------------------------------------
 -- PUBLIC METHODS 
 --------------------------------------------------------------------------------
 
-function Smoother:makeWeightsDEAD(obsIndex, k)
+function NnwSmoother:makeWeightsDEAD(obsIndex, k)
    -- return the kernelized weights for allXs[obsIndex] with k nearest neighbors
-   local v, isVerbose = makeVerbose(false, 'SmootherKwavg:makeWeights')
+   local v, isVerbose = makeVerbose(false, 'NnwSmootherKwavg:makeWeights')
    verify(v, isVerbose,
           {{obsIndex, 'obsIndex', 'isIntegerPositive'},
            {k, 'k', 'isIntegerPositive'}})
@@ -88,7 +88,7 @@ function Smoother:makeWeightsDEAD(obsIndex, k)
       local obsIndex = nearestIndices[i]
       if self._visible[obsIndex] == 1 then
          found = found + 1
-         local distance = Nn.euclideanDistance(self._allXs[obsIndex], query)
+         local distance = Nnw.euclideanDistance(self._allXs[obsIndex], query)
          sortedDistances[obsIndex] = distance
          v('obsIndex, found, distance', obsIndex, found, distance)
          if found == k then
@@ -101,7 +101,7 @@ function Smoother:makeWeightsDEAD(obsIndex, k)
    v('sortedDistances', sortedDistances)
    v('lambda', lambda)
    --halt()
-   local weights = Nn.weights(sortedDistances, lambda)
+   local weights = Nnw.weights(sortedDistances, lambda)
    v('weights')
    --halt()
    return weights

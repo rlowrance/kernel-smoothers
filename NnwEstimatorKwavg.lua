@@ -1,9 +1,5 @@
--- EstimatorKwavg.lua
+-- NnwEstimatorKwavg.lua
 -- estimate value using kernel-weighted average of k nearest neighbors
-
-require 'affirm'
-require 'makeVerbose'
-require 'verify'
 
 -- API overview
 if false then
@@ -18,10 +14,10 @@ end -- API overview
 -- CONSTRUCTOR
 --------------------------------------------------------------------------------
 
-local _, parent = torch.class('EstimatorKwavg', 'Estimator')
+local _, parent = torch.class('NnwEstimatorKwavg', 'NnwEstimator')
 
-function EstimatorKwavg:__init(xs, ys, kernelName)
-   local v, isVerbose = makeVerbose(true, 'EstimatorKwavg:__init')
+function NnwEstimatorKwavg:__init(xs, ys, kernelName)
+   local v, isVerbose = makeVerbose(true, 'NnwEstimatorKwavg:__init')
    assert(kernelName == 'epanechnikov quadratic',
           'only kernel supported is epanechnikov quadratic')   
    parent.__init(self, xs, ys)
@@ -31,7 +27,7 @@ end -- __init()
 -- PUBLIC METHODS
 --------------------------------------------------------------------------------
 
-function EstimatorKwavg:estimate(query, k)
+function NnwEstimatorKwavg:estimate(query, k)
    -- estimate y for a new query point using the Euclidean distance
    -- ARGS:
    -- query          : 1D Tensor
@@ -42,28 +38,28 @@ function EstimatorKwavg:estimate(query, k)
    -- false, reason  : no estimate was produced
    --                  reason is a string explaining why
 
-   local v, isVerbose = makeVerbose(false, 'EstimatorKwavg:estimate')
+   local v, isVerbose = makeVerbose(false, 'NnwEstimatorKwavg:estimate')
    verify(v, isVerbose,
           {{query, 'query', 'isTensor1D'},
            {k, 'k', 'isIntegerPositive'}})
 
 
-   local sortedDistances, sortedNeighborIndices = Nn.nearest(self._xs,
-                                                             query)
+   local sortedDistances, sortedNeighborIndices = Nnw.nearest(self._xs,
+                                                              query)
    v('sortedDistances', sortedDistances)
    v('sortedNeighborIndices', sortedNeighborIndices)
    
    local lambda = sortedDistances[k]
-   local weights = Nn.weights(sortedDistances, lambda)
+   local weights = Nnw.weights(sortedDistances, lambda)
    v('lambda', lambda)
    v('weights', weights)
 
    local visible = torch.Tensor(self._ys:size(1)):fill(1)
-   local ok, estimate = Nn.estimateKwavg(k,
-                                         sortedNeighborIndices,
-                                         visible,
-                                         weights,
-                                         self._ys)
+   local ok, estimate = Nnw.estimateKwavg(k,
+                                          sortedNeighborIndices,
+                                          visible,
+                                          weights,
+                                          self._ys)
    v('ok,estimate', ok, estimate)
    return ok, estimate
 end -- estimate()

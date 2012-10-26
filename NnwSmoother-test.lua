@@ -1,4 +1,4 @@
--- Smoother-test.lua
+-- NnwSmoother-test.lua
 
 require 'all'
 
@@ -13,9 +13,9 @@ function test.one()
    
    local cache = Nncache()
    
-   s = Smoother(xs, ys, visible, cache)
+   s = NnwSmoother(xs, ys, visible, cache)
    tester:assert(s ~= nil)
-   tester:asserteq(torch.typename(s), 'Smoother')
+   tester:asserteq(torch.typename(s), 'NnwSmoother')
 end -- one
 
 

@@ -1,4 +1,4 @@
--- SmootherAvg-test.lua
+-- NnwSmootherAvg-test.lua
 -- unit tests
 
 require 'all'
@@ -56,8 +56,8 @@ function tests.smoother()
    local queryIndex = 5
 
    local function test(k, expected)
-      -- test KnnSmootherAvg
-      local knn = SmootherAvg(xs, ys, visible, cache)
+      -- test KnnNnwSmootherAvg
+      local knn = NnwSmootherAvg(xs, ys, visible, cache)
       local ok, estimate = knn:estimate(queryIndex, k)
       tester:assert(ok)
       tester:asserteq(expected, estimate)

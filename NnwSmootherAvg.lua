@@ -1,9 +1,5 @@
--- SmootherAvg.lua
+-- NnwSmootherAvg.lua
 -- estimate value using simple average of k nearest neighbors
-
-require 'affirm'
-require 'makeVerbose'
-require 'verify'
 
 -- API overview
 if false then
@@ -12,20 +8,20 @@ if false then
 end -- API overview
 
 --------------------------------------------------------------------------------
--- SmootherAvg
+-- NnwSmootherAvg
 --------------------------------------------------------------------------------
 
-local _, parent = torch.class('SmootherAvg', 'Smoother')
+local _, parent = torch.class('NnwSmootherAvg', 'NnwSmoother')
 
-function SmootherAvg:__init(allXs, allYs, visible, nncache) 
-   local v, isVerbose = makeVerbose(false, 'SmootherAvg:__init')
+function NnwSmootherAvg:__init(allXs, allYs, visible, nncache) 
+   local v, isVerbose = makeVerbose(false, 'NnwSmootherAvg:__init')
    parent.__init(self, allXs, allYs, visible, nncache)
    v('self', self)
 end -- __init()
 
 
-function SmootherAvg:estimate(obsIndex, k)
-   local v, isVerbose = makeVerbose(false, 'SmootherAvg:estimate')
+function NnwSmootherAvg:estimate(obsIndex, k)
+   local v, isVerbose = makeVerbose(false, 'NnwSmootherAvg:estimate')
    verify(v, isVerbose,
           {{obsIndex, 'obsIndex', 'isIntegerPositive'},
            {k, 'k', 'isIntegerPositive'}})
@@ -39,11 +35,11 @@ function SmootherAvg:estimate(obsIndex, k)
    v('self._visible', self._visible)
    v('self', self)
 
-   local ok, result = Nn.estimateAvg(self._allXs,
-                                     self._allYs,
-                                     nearestIndices, 
-                                     self._visible,
-                                     k)
+   local ok, result = Nnw.estimateAvg(self._allXs,
+                                      self._allYs,
+                                      nearestIndices, 
+                                      self._visible,
+                                      k)
    --halt()
    return ok, result
 end -- estimate

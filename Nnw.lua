@@ -1,4 +1,4 @@
--- Nn.lua
+-- Nnw.lua
 -- common functions for the Nearest Neighbor package
 
 require 'affirm'
@@ -8,31 +8,31 @@ require 'verify'
 -- API overview
 if false then
    -- simple average
-   ok, estimate = Nn.estimateAvg(xs, ys, nearestIndices, visible, weights, k)
+   ok, estimate = Nnw.estimateAvg(xs, ys, nearestIndices, visible, weights, k)
 
    -- kernel-weighted average
-   ok, estimate = Nn.estimateKwavg(xs, ys, nearestIndices, visible, weights, k)
+   ok, estimate = Nnw.estimateKwavg(xs, ys, nearestIndices, visible, weights, k)
 
    -- local linear regression
-   ok,estimate = Nn.estimateLlr(xs, ys, nearestIndices, visible, weights, k)
+   ok,estimate = Nnw.estimateLlr(xs, ys, nearestIndices, visible, weights, k)
    
    -- euclidean distance
-   distances = Nn.euclideanDistances(xs, query)
+   distances = Nnw.euclideanDistances(xs, query)
 
    -- nearest neighbor distances and indices
-   sortedDistances, sortedIndices = Nn.nearest(xs, query)
+   sortedDistances, sortedIndices = Nnw.nearest(xs, query)
 
    -- weights from the Epanenchnikov kernel
    -- where lambda is the distance to the k-th nearest neighbor
-   weights = Nn.weights(sortedDistances, lambda)
+   weights = Nnw.weights(sortedDistances, lambda)
 end
 
-Nn = {}
+Nnw = {}
 
-function Nn.estimateAvg(xs, ys, nearestIndices, visible, k)
+function Nnw.estimateAvg(xs, ys, nearestIndices, visible, k)
    -- return true, average of k nearest visible neighbors
    -- ignore the weights
-   local v, isVerbose = makeVerbose(false, 'Nn.estimateAvg')
+   local v, isVerbose = makeVerbose(false, 'Nnw.estimateAvg')
    verify(v, isVerbose,
           {{xs, 'xs', 'isAny'},
            {ys, 'ys', 'isTensor1D'},
@@ -61,9 +61,9 @@ function Nn.estimateAvg(xs, ys, nearestIndices, visible, k)
       v('result', result)
       return true, result
    end
-end -- Nn.estimateAvg
+end -- Nnw.estimateAvg
 
-function Nn.estimateKwavg(k, sortedNeighborIndices, visible, weights, allYs)
+function Nnw.estimateKwavg(k, sortedNeighborIndices, visible, weights, allYs)
    -- ARGS
    -- k                     : integer > 0, number of neighbors to use
    -- sortedNeighborIndices : 1D Tensor
@@ -77,7 +77,7 @@ function Nn.estimateKwavg(k, sortedNeighborIndices, visible, weights, allYs)
    -- ok             : true or false
    -- estimate       : number or string
    
-   local v, isVerbose = makeVerbose(false, 'Nn.estimateKwavg')
+   local v, isVerbose = makeVerbose(false, 'Nnw.estimateKwavg')
    verify(v, isVerbose,
           {{k, 'k', 'isIntegerPositive'},
            {sortedNeighborIndices, 'sortedNeighborIndices', 'isTensor1D'},
@@ -115,9 +115,9 @@ function Nn.estimateKwavg(k, sortedNeighborIndices, visible, weights, allYs)
       v('estimate', estimate)
       return true, estimate
    end
-end -- Nn.estimateKwavg
+end -- Nnw.estimateKwavg
 
-function Nn.estimateLlr(k, regularizer,
+function Nnw.estimateLlr(k, regularizer,
                         sortedNeighborIndices, visible, weights, 
                         query, allXs, allYs)
    -- ARGS
@@ -137,7 +137,7 @@ function Nn.estimateLlr(k, regularizer,
 
    local debug = 0
    --local debug = 1  -- determine why inverse fails
-   local v, isVerbose = makeVerbose(false, 'Nn.estimateLlr')
+   local v, isVerbose = makeVerbose(false, 'Nnw.estimateLlr')
    verify(v, isVerbose,
           {{k, 'k', 'isIntegerPositive'},
            {regularizer, 'regularizer', 'isNumberNonNegative'},
@@ -230,14 +230,14 @@ function Nn.estimateLlr(k, regularizer,
    affirm.isTensor1D(estimate, 'estimate')
    assert(1 == estimate:size(1))
    return true, estimate[1]
-end -- Nn.estimateLlr
+end -- Nnw.estimateLlr
 
 
-function Nn.euclideanDistance(x, query)
+function Nnw.euclideanDistance(x, query)
    -- return scalar Euclidean distance
    local debug = 0
    --debug = 1  -- zero value for lambda
-   local v, isVerbose = makeVerbose(false, 'Nn:euclideanDistance')
+   local v, isVerbose = makeVerbose(false, 'Nnw:euclideanDistance')
    verify(v, isVerbose,
           {{x, 'x', 'isTensor1D'},
            {query, 'query', 'isTensor1D'}})
@@ -255,13 +255,13 @@ function Nn.euclideanDistance(x, query)
    return distance
 end -- euclideanDistance
 
-function Nn.euclideanDistances(xs, query)
+function Nnw.euclideanDistances(xs, query)
    -- return 1D tensor such that result[i] = EuclideanDistance(xs[i], query)
    -- We require use of Euclidean distance so that this code will work.
    -- It computes all the distances from the query point at once
    -- using Clement Farabet's idea to speed up the computation.
 
-   local v, isVerbose = makeVerbose(false, 'Nn:euclideanDistances')
+   local v, isVerbose = makeVerbose(false, 'Nnw:euclideanDistances')
    verify(v,
           isVerbose,
           {{xs, 'xs', 'isTensor2D'},
@@ -287,28 +287,28 @@ function Nn.euclideanDistances(xs, query)
   
    v('distances', distances)
    return distances
-end -- Nn.euclideanDistances
+end -- Nnw.euclideanDistances
 
-function Nn.nearest(xs, query)
+function Nnw.nearest(xs, query)
    -- find nearest observations to a query
    -- RETURN
    -- sortedDistances : 1D Tensor 
    --                   distances of each xs from query
    -- sortedIndices   : 1D Tensor 
    --                   indices that sort the distances
-   local v, isVerbose = makeVerbose(false, 'Nn.nearest')
+   local v, isVerbose = makeVerbose(false, 'Nnw.nearest')
    verify(v, isVerbose,
           {{xs, 'xs', 'isTensor2D'},
            {query, 'query', 'isTensor1D'}})
-   local distances = Nn.euclideanDistances(xs, query)
+   local distances = Nnw.euclideanDistances(xs, query)
    v('distances', distances)
    local sortedDistances, sortedIndices = torch.sort(distances)
    v('sortedDistances', sortedDistances)
    v('sortedIndices', sortedIndices)
    return sortedDistances, sortedIndices
-end -- Nn.nearest
+end -- Nnw.nearest
 
-function Nn.weights(sortedDistances, lambda)
+function Nnw.weights(sortedDistances, lambda)
    -- return values of Epanenchnov kernel using euclidean distance
    local v, isVerbose = makeVerbose(false, 'KernelSmoother.weights')
    verify(v, isVerbose,
@@ -331,4 +331,4 @@ function Nn.weights(sortedDistances, lambda)
    v('weights', weights)
 
    return weights
-end -- Nn.weights
+end -- Nnw.weights

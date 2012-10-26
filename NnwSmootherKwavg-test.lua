@@ -1,4 +1,4 @@
--- SmootherKwavg-test.lua
+-- NnwSmootherKwavg-test.lua
 -- unit tests 
 
 require 'all'
@@ -30,7 +30,7 @@ function tests.one()
    local nShards = 1
    local nncb = Nncachebuilder(xs, nShards)
    local filePathPrefix = '/tmp/Nn-test-cache-'
-   local chatty = false
+   local chatty = isVerbose
    nncb:createShard(1, filePathPrefix, chatty)
    Nncachebuilder.mergeShards(nShards, filePathPrefix, chatty)
    local cache = Nncache.loadUsingPrefix(filePathPrefix)
@@ -56,8 +56,8 @@ function tests.one()
    local queryIndex = 5
 
    local function test(k, expected)
-      -- test KnnSmootherKwavg
-      local knn = SmootherKwavg(xs, ys, visible, cache, 
+      -- test KnnNnwSmootherKwavg
+      local knn = NnwSmootherKwavg(xs, ys, visible, cache, 
                                 'epanechnikov quadratic')
       local ok, estimate = knn:estimate(queryIndex, k)
       tester:assert(ok, 'not ok; error message = ' .. tostring(estimate))

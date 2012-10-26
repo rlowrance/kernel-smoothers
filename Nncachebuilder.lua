@@ -108,7 +108,7 @@ function Nncachebuilder:createShard(shardNumber, filePathPrefix, chatty)
          -- observation in shard, so create its neighbors indices
          local query = self._allXs[obsIndex]:clone()
          collectgarbage()
-         local _, allIndices = Nn.nearest(self._allXs,
+         local _, allIndices = Nnw.nearest(self._allXs,
                                           query)
          -- NOTE: creating a view of the storage seems like a good idea
          -- but fails when the tensor is serialized out

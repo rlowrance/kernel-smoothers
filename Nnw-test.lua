@@ -1,5 +1,5 @@
--- Knn-test.lua
--- unit tests for class KnnEstimator and KnnSmoother
+-- Nnw-test.lua
+-- unit tests for class Nnw
 
 require 'all'
 
@@ -39,7 +39,7 @@ function test.estimateAvg()
    v('weights', weights)
    
    function test(k, expected)
-      local ok, estimate = Nn.estimateAvg(xs,
+      local ok, estimate = Nnw.estimateAvg(xs,
                                           ys,
                                           nearestIndices,
                                           visible,
@@ -53,7 +53,7 @@ function test.estimateAvg()
 end -- estimateAvg
 
 function test.estimateKwavg()
-   -- Nn.estimateKwavg is tested by
+   -- Nnw.estimateKwavg is tested by
    --   EstimatorKwavg-test
    --   SmootherKwavg-test
    -- and hence not here
@@ -61,7 +61,7 @@ function test.estimateKwavg()
    local v = makeVerbose(false, 'test.estimateAvg')
    local nSamples, nDims, xs, ys = makeExample()
    local query = torch.Tensor(nDims):fill(3)
-   local sortedDistances, sortedIndices = Nn.nearest(xs, query)
+   local sortedDistances, sortedIndices = Nnw.nearest(xs, query)
 
    local visible = torch.Tensor(nSamples):fill(0)
    for i = 1, nSamples do
@@ -76,10 +76,10 @@ function test.estimateKwavg()
    
    function test(k, expected)
       local lambda = sortedDistances[k]
-      local weights = Nn.weights(sortedDistances, lambda)
+      local weights = Nnw.weights(sortedDistances, lambda)
       v('lambda', lambda)
       v('weights', weights)
-      local ok, estimate = Nn.estimateKwavg(xs,
+      local ok, estimate = Nnw.estimateKwavg(xs,
                                             ys,
                                             sortedIndices,
                                             visible,
@@ -102,7 +102,7 @@ function test.euclideanDistance()
    local function test(xsIndex, expected)
       local tol = 1e-5
       tester:asserteqWithin(expected, 
-                            Nn.euclideanDistance(xs[xsIndex], query), 
+                            Nnw.euclideanDistance(xs[xsIndex], query), 
                             tol)
    end -- test
    
@@ -116,7 +116,7 @@ function test.euclideanDistances()
    local nSamples, nDims, xs, ys = makeExample()
 
    local query = torch.Tensor(nDims):fill(0)
-   local distances = Nn.euclideanDistances(xs, query)
+   local distances = Nnw.euclideanDistances(xs, query)
 
    local function test(xsIndex, expected)
       local tol = 1e-5
@@ -132,7 +132,7 @@ function test.euclideanDistances()
 end -- test.euclideanDistances
 
 function test.nearest()
-   local v = makeVerbose(false, 'test.Nnnearest')
+   local v = makeVerbose(false, 'test.nearest')
    local nObs = 3
    local nDims = 1
    local xs = torch.Tensor(nObs, nDims)
@@ -145,7 +145,7 @@ function test.nearest()
    local query = torch.Tensor(nDims)
    query[1] = 2.1
    
-   local sortedDistances, sortedIndices = Nn.nearest(xs, query)
+   local sortedDistances, sortedIndices = Nnw.nearest(xs, query)
    v('sortedDistance', sortedDistances)
    v('sortedIndices', sortedIndices)
    
@@ -166,7 +166,7 @@ function test.weights()
       sortedDistances[i] = i
    end
    local lambda = 2
-   local weights = Nn.weights(sortedDistances, lambda)
+   local weights = Nnw.weights(sortedDistances, lambda)
    
    tester:asserteq(0.5625, weights[1])
    tester:asserteq(0, weights[2])

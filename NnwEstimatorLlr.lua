@@ -1,13 +1,9 @@
--- EstimatorLlr.lua
+-- NnwEstimatorLlr.lua
 -- estimate value using local linear regression of k nearest neighbors
-
-require 'affirm'
-require 'makeVerbose'
-require 'verify'
 
 -- API overview
 if false then
-   llr = EstimatorLlr(xs, ys)
+   llr = NnwEstimatorLlr(xs, ys)
    
    -- estimate using k nearest neighbors
    ok, estimate = llr:estimate(query, k)
@@ -17,10 +13,10 @@ end
 -- CONSTRUCTOR
 --------------------------------------------------------------------------------
 
-local _, parent = torch.class('EstimatorLlr', 'Estimator')
+local _, parent = torch.class('NnwEstimatorLlr', 'NnwEstimator')
 
-function EstimatorLlr:__init(xs, ys, kernelName)
-   local v, isVerbose = makeVerbose(false, 'EstimatorLlr:__init')
+function NnwEstimatorLlr:__init(xs, ys, kernelName)
+   local v, isVerbose = makeVerbose(false, 'NnwEstimatorLlr:__init')
    verify(v, isVerbose,
           {{xs, 'xs', 'isTensor2D'},
            {ys, 'ys', 'isTensor1D'},
@@ -34,7 +30,7 @@ end -- __init()
 -- PUBLIC METHODS
 --------------------------------------------------------------------------------
 
-function EstimatorLlr:estimate(query, params)
+function NnwEstimatorLlr:estimate(query, params)
    -- estimate y for a new query point using the Euclidean distance
    -- ARGS:
    -- query          : 1D Tensor
@@ -47,7 +43,7 @@ function EstimatorLlr:estimate(query, params)
    -- false, reason  : no estimate was produced
    --                  reason is a string explaining why
 
-   local v, isVerbose = makeVerbose(false, 'EstimatorLlr:estimate')
+   local v, isVerbose = makeVerbose(false, 'NnwEstimatorLlr:estimate')
    if isVerbose then print('*******************************************') end
    verify(v, isVerbose,
           {{query, 'query', 'isTensor1D'},
@@ -63,25 +59,25 @@ function EstimatorLlr:estimate(query, params)
    assert(k <= nObs,
           string.format('k (=%s) exceeds number of observations (=%d)',
                         tostring(k), nObs))
-   local sortedDistances, sortedNeighborIndices = Nn.nearest(self._xs,
-                                                             query)
+   local sortedDistances, sortedNeighborIndices = Nnw.nearest(self._xs,
+                                                              query)
    v('sortedDistances', sortedDistances)
    v('sortedNeighborIndices', sortedNeighborIndices)
    
    local lambda = sortedDistances[k]
-   local weights = Nn.weights(sortedDistances, lambda)
+   local weights = Nnw.weights(sortedDistances, lambda)
    v('lambda', lambda)
    v('weights', weights)
 
    local visible = torch.Tensor(nObs):fill(1)
-   local ok, estimate = Nn.estimateLlr(k,
-                                       params.regularizer,
-                                       sortedNeighborIndices,
-                                       visible,
-                                       weights,
-                                       query,
-                                       self._xs,
-                                       self._ys)
+   local ok, estimate = Nnw.estimateLlr(k,
+                                        params.regularizer,
+                                        sortedNeighborIndices,
+                                        visible,
+                                        weights,
+                                        query,
+                                        self._xs,
+                                        self._ys)
    v('ok,estimate', ok, estimate)
    return ok, estimate
 end -- estimate()
