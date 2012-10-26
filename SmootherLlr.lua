@@ -38,7 +38,7 @@ end -- __init()
 --------------------------------------------------------------------------------
 
 function SmootherLlr:estimate(obsIndex, params)
-   local v, isVerbose = makeVerbose(true, 'SmootherLlr:estimate')
+   local v, isVerbose = makeVerbose(false, 'SmootherLlr:estimate')
    verify(v, isVerbose,
           {{obsIndex, 'obsIndex', 'isIntegerPositive'},
            {params, 'params', 'isTable'}})

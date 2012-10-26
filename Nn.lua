@@ -236,8 +236,8 @@ end -- Nn.estimateLlr
 function Nn.euclideanDistance(x, query)
    -- return scalar Euclidean distance
    local debug = 0
-   debug = 1  -- zero value for lambda
-   local v, isVerbose = makeVerbose(true, 'Nn:euclideanDistance')
+   --debug = 1  -- zero value for lambda
+   local v, isVerbose = makeVerbose(false, 'Nn:euclideanDistance')
    verify(v, isVerbose,
           {{x, 'x', 'isTensor1D'},
            {query, 'query', 'isTensor1D'}})

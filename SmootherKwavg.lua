@@ -38,7 +38,9 @@ end -- __init()
 --------------------------------------------------------------------------------
 
 function SmootherKwavg:estimate(obsIndex, k)
-   local v, isVerbose = makeVerbose(true, 'SmootherKwavg:estimate')
+   local debug = 0
+   --debug = 1 -- zero value for lambda
+   local v, isVerbose = makeVerbose(false, 'SmootherKwavg:estimate')
    verify(v, isVerbose,
           {{obsIndex, 'obsIndex', 'isIntegerPositive'},
            {k, 'k', 'isIntegerPositive'}})
@@ -49,6 +51,7 @@ function SmootherKwavg:estimate(obsIndex, k)
    local nObs = self._visible:size(1)
    local distances = torch.Tensor(nObs):fill(1e100)
    local query = self._allXs[obsIndex]
+   v('query', query)
    local sortedNeighborIndices = self._nncache:getLine(obsIndex)
    assert(sortedNeighborIndices)
    v('sortedNeighborIndices', sortedNeighborIndices)
@@ -58,6 +61,9 @@ function SmootherKwavg:estimate(obsIndex, k)
       if self._visible[obsIndex] == 1 then
          local distance= Nn.euclideanDistance(self._allXs[obsIndex], query)
          distances[i] = distance
+         if debug == 1 then
+            v('x', self._allXs[obsIndex])
+         end
          v('i,obsIndex,distance', i, obsIndex, distance)
          found = found + 1
          if found == k then
@@ -68,6 +74,10 @@ function SmootherKwavg:estimate(obsIndex, k)
    end
    v('lambda', lambda)
    v('distances', distances)
+
+   if lambda == 0 then
+      return false, 'lambda == 0'
+   end
 
    local weights = Nn.weights(distances, lambda)
    v('weights', weights)

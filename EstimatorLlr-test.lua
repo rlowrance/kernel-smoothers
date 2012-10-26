@@ -9,7 +9,7 @@ tester = Tester()
 function test.one()
    -- this is a very weak tests, it checks for completion
    -- figuring out a problem to solve by hand seems complicated
-   local v = makeVerbose(true, 'test.one')
+   local v = makeVerbose(false, 'test.one')
    local nObs = 3
    local nDims = 2
    local xs = torch.Tensor(nObs, nDims)
@@ -39,7 +39,7 @@ end -- test.one
 function test.two()
    -- attempt to recover known generator
    -- y = a x1 + b x2 + c
-   local v = makeVerbose(true, 'test.two')
+   local v = makeVerbose(false, 'test.two')
    local a = 2
    local b = 3
    local c = 4

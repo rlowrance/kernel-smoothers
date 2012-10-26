@@ -7,10 +7,12 @@ check:
 	torch Estimator-test.lua
 	torch EstimatorAvg-test.lua
 	torch EstimatorKwavg-test.lua
+	torch EstimatorLlr-test.lua
 	torch Nn-test.lua
 	torch Smoother-test.lua
 	torch SmootherAvg-test.lua
 	torch SmootherKwavg-test.lua
+	torch SmootherLlr-test.lua
 
 
 

@@ -3,10 +3,10 @@
 
 -- API overview
 if false then
-   nnc = Nncachebuilder(allXs, nShards)
+   nncb = Nncachebuilder(allXs, nShards)
    for n = 1, nShards do
       -- serialize cache object (a table) to file <prefix>nncache-shard-n.txt
-      nnc:createShard(n, 'filePathPrefix')
+      nncb:createShard(n, 'filePathPrefix')
    end
    -- create serialized cache object int file <prefix>nncache-merged.txt
    Nncachebulder.mergeShards(nShards, 'filePathPrefix')
@@ -14,7 +14,7 @@ if false then
    -- ILLUSTRATIVE USE
 
    -- read the serialized merged cache from file system
-   cache = Nncache.load('filePathPrefix') 
+   cache = Nncache.loadUsingPrefix('filePathPrefix') 
    -- now cache[27] is a 1D tensor of the sorted indices closest to obs # 27
    -- in the original xs
    

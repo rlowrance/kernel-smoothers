@@ -53,8 +53,8 @@ function EstimatorLlr:estimate(query, params)
           {{query, 'query', 'isTensor1D'},
            {params, 'params', 'isTable'}})
 
-   affirm.isIntegerPositive(params.k, 'k')
-   affirm.isNumberNonNegative(params.regularizer, 'regularizer')
+   affirm.isIntegerPositive(params.k, 'params.k')
+   affirm.isNumberNonNegative(params.regularizer, 'params.regularizer')
    local k = params.k
 
    v('self', self)
