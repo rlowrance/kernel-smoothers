@@ -63,7 +63,7 @@ end -- NnSmoother:__init()
 -- PUBLIC METHODS 
 --------------------------------------------------------------------------------
 
-function Smoother:makeWeights(obsIndex, k)
+function Smoother:makeWeightsDEAD(obsIndex, k)
    -- return the kernelized weights for allXs[obsIndex] with k nearest neighbors
    local v, isVerbose = makeVerbose(false, 'SmootherKwavg:makeWeights')
    verify(v, isVerbose,

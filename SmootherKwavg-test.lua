@@ -57,7 +57,8 @@ function tests.one()
 
    local function test(k, expected)
       -- test KnnSmootherKwavg
-      local knn = SmootherKwavg(xs, ys, visible, cache)
+      local knn = SmootherKwavg(xs, ys, visible, cache, 
+                                'epanechnikov quadratic')
       local ok, estimate = knn:estimate(queryIndex, k)
       tester:assert(ok, 'not ok; error message = ' .. tostring(estimate))
       local tol = 1e-2

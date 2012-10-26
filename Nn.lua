@@ -65,15 +65,14 @@ end -- Nn.estimateAvg
 
 function Nn.estimateKwavg(k, sortedNeighborIndices, visible, weights, allYs)
    -- ARGS
-   -- xs             : 2D Tensor of inputs; obs[i] = xs[i]
-   -- ys             : 1D Tensor of target values
-   -- nearestIndices : table
-   --                  nearestIndices[1] = obsIndex of closest neighbor
-   --                     xs[nearestIndices[1]] = features of closest neighbor
-   --                   nearestIndices[2] = obsIndex of 2nd closest neighbor
-   -- visible        : table with elements in {0,1}
-   --                  visible[1] == 1 iff using obsIndex 1
-   -- k              : integer > 0, number of neighbors to use
+   -- k                     : integer > 0, number of neighbors to use
+   -- sortedNeighborIndices : 1D Tensor
+   --                         use first k neighbors that are also visible
+   -- visible               : 1D Tensor
+   --                         visible[obsIndex] == 1 ==> use this observation
+   --                         as a neighbor
+   -- weights               : 1D Tensor
+   -- allYs                 : 1D Tensor
    -- RETURNS
    -- ok             : true or false
    -- estimate       : number or string
@@ -118,15 +117,139 @@ function Nn.estimateKwavg(k, sortedNeighborIndices, visible, weights, allYs)
    end
 end -- Nn.estimateKwavg
 
+function Nn.estimateLlr(k, regularizer,
+                        sortedNeighborIndices, visible, weights, 
+                        query, allXs, allYs)
+   -- ARGS
+   -- k                     : integer > 0, number of neighbors to use
+   -- regularizer           : number >= 0, added to each weight
+   -- sortedNeighborIndices : 1D Tensor
+   --                         use first k neighbors that are also visible
+   -- visible               : 1D Tensor
+   --                         visible[obsIndex] == 1 ==> use this observation
+   --                         as a neighbor
+   -- weights               : 1D Tensor
+   -- allXs                 : 2D Tensor
+   -- allYs                 : 1D Tensor
+   -- RETURNS
+   -- ok             : true or false
+   -- estimate       : number or string
+
+   local debug = 0
+   --local debug = 1  -- determine why inverse fails
+   local v, isVerbose = makeVerbose(false, 'Nn.estimateLlr')
+   verify(v, isVerbose,
+          {{k, 'k', 'isIntegerPositive'},
+           {regularizer, 'regularizer', 'isNumberNonNegative'},
+           {sortedNeighborIndices, 'sortedNeighborIndices', 'isTensor1D'},
+           {visible, 'visible', 'isTensor1D'},
+           {weights, 'weights', 'isTensor1D'},
+           {query, 'query', 'isTensor1D'},
+           {allXs, 'allXs', 'isTensor2D'},
+           {allYs, 'allYs', 'isTensor1D'}})
+
+   assert(allYs:size(1) == allXs:size(1),
+          'allXs and allYs must have same number of observations')
+   
+   local nDims = allXs:size(2)
+
+   assert(k > nDims,
+          string.format('undetermined since k(=%d) <= nDims (=%d)',
+                        k, nDims))
+   -- FIX ME: create using k nearest visible neighbors
+   -- create regression matrix B
+   -- by prepending a 1 in the first position
+   local B = torch.Tensor(k, nDims + 1)
+   local selectedYs = torch.Tensor(k)
+   local wVector = torch.Tensor(k)
+   local found = 0
+   for i = 1, allXs:size(1) do
+      local obsIndex = sortedNeighborIndices[i]
+      if visible[obsIndex] == 1 then
+         found = found + 1
+         v('i,obsIndex,found', i, obsIndex, found)
+         B[found][1] = 1
+         for d = 1, nDims do
+            B[found][d+1] = allXs[obsIndex][d]
+         end
+         selectedYs[found] = allYs[obsIndex]
+         wVector[found] = weights[i] + regularizer
+         if found == k then
+            break
+         end
+      end
+   end
+   v('nObs, nDims', nObs, nDims)
+   v('B (regression matrix)', B)
+   v('selectedYs', selectedYs)
+   v('wVector', wVector)
+
+   -- also prepend a 1 in the first position of the query
+   -- to make the final multiplication work, the prepended query needs to be 2D
+   local extendedQuery = torch.Tensor(1, nDims + 1)
+   extendedQuery[1][1] = 1
+   for d = 1, nDims do
+      extendedQuery[1][d + 1] = query[d]
+   end
+   v('extendedQuery', extendedQuery)
+
+   local BT = B:t()        -- transpose B
+   local W = DiagonalMatrix(wVector)
+   v('BT', BT)
+   v('W', W) 
+   
+   -- BTWB = B^T W B
+   local BTWB = BT * (W:mul(B))
+   v('BTWB', BTWB)
+
+   -- invert BTWB, catching error
+   local ok, BTWBInv = pcall(torch.inverse, BTWB)
+   if not ok then
+      -- if the error message is "getrf: U(i,i) is 0, U is singular"
+      -- then LU factorization succeeded but U is exactly 0, so that
+      --      division by zero will occur if U is used to solve a
+      --      system of equations
+      -- ref: http://dlib.net/dlib/matrix/lapack/getrf.h.html
+      if debug == 1 then 
+         print('Llr:estimate: error in call to torch.inverse')
+         print('error message = ' .. BTWBInv)
+         error(BTWBInv)
+      end
+      return false, BTWBInv  -- return the error message
+   end
+
+   local betas =  BTWBInv * BT * W:mul(selectedYs)
+   local estimate1 = extendedQuery * BTWBInv * BT * W:mul(selectedYs)
+   v('estimate1', estimate1)
+   local estimate = extendedQuery * betas
+   v('extendedQuery', extendedQuery)
+   v('beta', BTWBInv * BT * W:mul(selectedYs))
+   v('estimate', estimate[1])
+
+
+   affirm.isTensor1D(estimate, 'estimate')
+   assert(1 == estimate:size(1))
+   return true, estimate[1]
+end -- Nn.estimateLlr
+
 
 function Nn.euclideanDistance(x, query)
    -- return scalar Euclidean distance
+   local debug = 0
+   --debug = 1  -- zero value for lambda
    local v, isVerbose = makeVerbose(false, 'Nn:euclideanDistance')
    verify(v, isVerbose,
           {{x, 'x', 'isTensor1D'},
            {query, 'query', 'isTensor1D'}})
    assert(x:size(1) == query:size(1))
    local ds = x - query
+   if debug == 1 then
+      for i = 1, x:size(1) do
+         print(string.format('x[%d] %f query[%d] %f ds[%d] %f',
+                             i, x[i], i, query[i], i, ds[i]))
+      end
+   end
+   v('ds', ds)
    local distance = math.sqrt(torch.sum(torch.cmul(ds, ds)))
    v('distance', distance)
    return distance
