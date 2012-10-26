@@ -1,4 +1,4 @@
--- LLr-test.lua
+-- MwLlr-test.lua
 -- unit test
 
 require 'all'
@@ -21,7 +21,7 @@ function test.one()
       end
    end
 
-   local llr = Llr(xs, ys, 'epanechnikov quadratic')
+   local llr = MwLlr(xs, ys, 'epanechnikov quadratic')
    
    local query = torch.Tensor(nDims)
    query[1] = 1

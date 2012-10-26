@@ -1,10 +1,10 @@
--- Llr.lua
+-- MwLlr.lua
 -- local linear regression
 -- ref: Hastie-01 p.166 and following
 
 -- example
 if false then
-   local kwavg = Llr(xs, ys, kernelName)
+   local kwavg = MwLlr(xs, ys, kernelName)
 
    local ok, estimate = LLr:estimate(query, lambda)
    if not ok then
@@ -25,9 +25,9 @@ require 'verify'
 --------------------------------------------------------------------------------
 
 -- create class object
-torch.class('Llr')
+torch.class('MwLlr')
 
-function Llr:__init(xs, ys, kernelName)
+function MwLlr:__init(xs, ys, kernelName)
    -- ARGS:
    -- xs         : 2D Tensor
    --              the i-th input sample is xs[i]
@@ -35,7 +35,7 @@ function Llr:__init(xs, ys, kernelName)
    --              y[i] is the known value (target) of input sample xs[i]
    --              number of ys must equal number of rows in xs
    -- kernelName : string
-   local v, verbose = makeVerbose(false, 'Llr:__init')
+   local v, verbose = makeVerbose(false, 'MwLlr:__init')
 
    verify(v,
           verbose,
@@ -61,7 +61,7 @@ end
 -- PUBLIC METHODS
 --------------------------------------------------------------------------------
 
-function Llr:estimate(query, lambda)
+function MwLlr:estimate(query, lambda)
    -- estimate y for a new query point using the specified kernel
    -- ARGS:
    -- lambda : number > 0, xs outside of this radius are given 0 weights
@@ -70,11 +70,11 @@ function Llr:estimate(query, lambda)
    --                  estimate is a number
    -- false, reason  : no estimate was produced
    --                  reason is a string
-   local v, isVerbose = makeVerbose(true, 'Llr:estimate')
+   local v, isVerbose = makeVerbose(true, 'MwLlr:estimate')
    local debug = 1  -- torch.inverse(BTWB): U is always singular
 
    if debug ~= 0 then
-      print('DEBUGGING Llr:estimate')
+      print('DEBUGGING MwLlr:estimate')
    end
 
    verify(v,
@@ -201,7 +201,7 @@ function Llr:estimate(query, lambda)
       --      system of equations
       -- ref: http://dlib.net/dlib/matrix/lapack/getrf.h.html
       if debug == 1 then
-         print('Llr:estimate: error in call to torch.inverse')
+         print('MwLlr:estimate: error in call to torch.inverse')
          print('error message = ' .. BTWBInv)
          error(BTWBInv)
       end

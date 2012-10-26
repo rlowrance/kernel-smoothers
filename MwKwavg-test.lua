@@ -1,5 +1,5 @@
--- Kwavg-test.lua
--- unit tests for class Kwavg
+-- MwKwavg-test.lua
+-- unit tests for class MwKwavg
 
 require 'all'
 
@@ -31,7 +31,7 @@ function tests.estimate()
    -- lambda:             1  2  3       4       5       6
    local expectedSeq = {0/0, 1, 1, 1.2353, 1.3714, 1.6364}
    for lambda = 1, 6 do
-      local kwavg = Kwavg(xs, ys, 'epanechnikov quadratic')
+      local kwavg = MwKwavg(xs, ys, 'epanechnikov quadratic')
       v('lambda', lambda)
       local ok, actual = kwavg:estimate(query, lambda)
       v('ok', ok)
@@ -62,7 +62,7 @@ function tests.smooth1()
    -- i:                  1  2  3       4
    local expectedSeq = {0/0, 2, 3, 3.9999}
    for i = 1, 4 do
-      local kwavg = Kwavg(xs, ys, 'epanechnikov quadratic')
+      local kwavg = MwKwavg(xs, ys, 'epanechnikov quadratic')
       local errorIfZeroSumWeights = false
       local useQueryPoint = false
       local ok, actual = kwavg:smooth(i, i, useQueryPoint)
@@ -90,7 +90,7 @@ function tests.smooth2()
    
    -- for calculations, see lab book date 2012-08-23
    local function test(queryIndex, lambda, expected)
-      local kwavg = Kwavg(xs, ys, 'epanechnikov quadratic')
+      local kwavg = MwKwavg(xs, ys, 'epanechnikov quadratic')
       local useQueryPoint = true
       local ok, actual = kwavg:smooth(queryIndex, lambda, useQueryPoint)
       tester:assert(ok, 'no error')
