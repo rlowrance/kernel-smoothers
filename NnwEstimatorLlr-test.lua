@@ -1,4 +1,4 @@
--- EstimatorLlr-test.lua
+-- NnwEstimatorLlr-test.lua
 -- unit test
 
 require 'all'
@@ -21,7 +21,7 @@ function test.one()
       end
    end
 
-   local llr = EstimatorLlr(xs, ys, 'epanechnikov quadratic')
+   local llr = NnwEstimatorLlr(xs, ys, 'epanechnikov quadratic')
    
    local query = torch.Tensor(nDims)
    query[1] = 23
@@ -61,7 +61,7 @@ function test.two()
    v('ys', ys)
 
    -- re-estimate every observation with k nearest neighbors
-   llr = EstimatorLlr(xs, ys, 'epanechnikov quadratic')
+   llr = NnwEstimatorLlr(xs, ys, 'epanechnikov quadratic')
    ks = {3, 5}
    ks = {5}
    for _, k in ipairs(ks) do

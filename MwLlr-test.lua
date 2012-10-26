@@ -1,4 +1,4 @@
--- LLr-test.lua
+-- MwLlr-test.lua
 -- unit test
 
 require 'all'
@@ -10,7 +10,7 @@ function test.one()
    -- this is a very weak tests, it checks for completion
    -- figuring out a problem to solve by hand seems complicated
    local v = makeVerbose(true, 'test.one')
-   local nObs = 10
+   local nObs = 3
    local nDims = 2
    local xs = torch.Tensor(nObs, nDims)
    local ys = torch.Tensor(nObs)
@@ -21,24 +21,14 @@ function test.one()
       end
    end
 
-   -- build the cache
-   local nShards = 1
-   local nncb = Nncachebuilder(xs, nShards)
-   local filePathPrefix = '/tmp/SmootherLlr-test-'
-   nncb:createShard(1, filePathPrefix)
-   Nncachebuilder.mergeShards(nShards, filePathPrefix)
-   local nncache = Nncache.loadUsingPrefix(filePathPrefix)
-
-   local visible = torch.Tensor(nObs):fill(1)
-
-   local llr = SmootherLlr(xs, ys, visible, nncache, 'epanechnikov quadratic')
+   local llr = MwLlr(xs, ys, 'epanechnikov quadratic')
    
-   local queryIndex = 5
+   local query = torch.Tensor(nDims)
+   query[1] = 1
+   query[2] = 2
 
-   local params = {}
-   params.k = 5
-   params.regularizer = 1e-7
-   local ok, estimate = llr:estimate(queryIndex, params)
+   local lambda = 50
+   local ok, estimate = llr:estimate(query, lambda)
    v('estimate', estimate)
    tester:assert(ok)
    tester:assertgt(estimate, 0)

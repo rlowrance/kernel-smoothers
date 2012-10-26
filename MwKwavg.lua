@@ -1,10 +1,10 @@
--- Kwavg.lua
+-- MwKwavg.lua
 -- kernel weighted average using the Epanechnikov Quadratic Kernel
 -- ref: Hastie-01 p.166 and following
 
 -- example
 if false then
-   local kwavg = Kwavg(xs, ys, 'epanechnikov quadratic')
+   local kwavg = MwKwavg(xs, ys, 'epanechnikov quadratic')
 
    local ok, estimate = kwavg:estimate(query, lambda)
    if not ok then
@@ -13,7 +13,7 @@ if false then
 
    -- smooth is DEPRECATED
    local useQueryPoint = false
-   local smoothedEstimate = Kwavg:smooth(queryIndex, lambda,
+   local smoothedEstimate = MwKwavg:smooth(queryIndex, lambda,
                                          useQueryPoint)
 end
 
@@ -29,9 +29,9 @@ require 'verify'
 --------------------------------------------------------------------------------
 
 -- create class object
-torch.class('Kwavg')
+torch.class('MwKwavg')
 
-function Kwavg:__init(xs, ys, kernelName)
+function MwKwavg:__init(xs, ys, kernelName)
    -- ARGS:
    -- xs         : 2D Tensor
    --              the i-th input sample is xs[i]
@@ -39,7 +39,7 @@ function Kwavg:__init(xs, ys, kernelName)
    --              y[i] is the known value (target) of input sample xs[i]
    --              number of ys must equal number of rows in xs
    -- kernelName : string
-   local v, verbose = makeVerbose(false, 'Kwavg:__init')
+   local v, verbose = makeVerbose(false, 'MwKwavg:__init')
 
    verify(v,
           verbose,
@@ -60,7 +60,7 @@ end
 -- PUBLIC METHODS
 --------------------------------------------------------------------------------
 
-function Kwavg:estimate(query, lambda)
+function MwKwavg:estimate(query, lambda)
    -- estimate y for a new query point using the specified kernel
    -- ARGS:
    -- lambda : number > 0, xs outside of this radius are given 0 weights
@@ -69,7 +69,7 @@ function Kwavg:estimate(query, lambda)
    --                  estimate is a number
    -- false, reason  : no estimate was produced
    --                  reason is a string
-   local v, verbose = makeVerbose(false, 'Kwavg:estimate')
+   local v, verbose = makeVerbose(false, 'MwKwavg:estimate')
 
    verify(v,
           verbose,

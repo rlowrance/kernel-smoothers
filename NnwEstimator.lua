@@ -1,5 +1,5 @@
--- Estimator.lua
--- parent class for all Estimator classes
+-- NnwEstimator.lua
+-- parent class for all NnwEstimator classes
 
 require 'affirm'
 require 'makeVerbose'
@@ -7,7 +7,7 @@ require 'verify'
 
 -- API overview
 if false then
-   e = Estimator(xs, ys)
+   e = NnwEstimator(xs, ys)
 
    -- all methods are supplied by a subclass
 end -- API overview
@@ -16,10 +16,10 @@ end -- API overview
 -- Constructor
 --------------------------------------------------------------------------------
 
-torch.class('Estimator')
+torch.class('NnwEstimator')
 
-function Estimator:__init(xs, ys)
-   local v, isVerbose = makeVerbose(false, 'Estimator:__init')
+function NnwEstimator:__init(xs, ys)
+   local v, isVerbose = makeVerbose(false, 'NnwEstimator:__init')
    verify(v, isVerbose,
           {{xs, 'xs', 'isTensor2D'},
            {ys, 'ys', 'isTensor1D'}})

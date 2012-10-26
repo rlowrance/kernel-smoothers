@@ -1,13 +1,9 @@
--- SmootherKwavg.lua
+-- NnwSmootherLlr.lua
 -- estimate value using kernel-weighted average of k nearest neighbors
-
-require 'affirm'
-require 'makeVerbose'
-require 'verify'
 
 -- API overview
 if false then
-   skwavg = SmootherKwavg(allXs, allYs, visible, cache)
+   skwavg = NnwSmootherLlr(allXs, allYs, visible, cache)
    ok, estimate = skwavg:estimate(queryIndex, k)
 end -- API overview
 
@@ -16,10 +12,10 @@ end -- API overview
 -- CONSTRUCTOR
 --------------------------------------------------------------------------------
 
-local _, parent = torch.class('SmootherKwavg', 'Smoother')
+local _, parent = torch.class('NnwSmootherLlr', 'NnwSmoother')
 
-function SmootherKwavg:__init(allXs, allYs, visible, nncache, kernelName)
-   local v, isVerbose = makeVerbose(false, 'SmootherKwavg:__init')
+function NnwSmootherLlr:__init(allXs, allYs, visible, nncache, kernelName)
+   local v, isVerbose = makeVerbose(false, 'NnwSmootherLlr:__init')
    verify(v, isVerbose,
           {{allXs, 'allXs', 'isTensor2D'},
            {allYs, 'allYs', 'isTensor1D'},
@@ -37,17 +33,22 @@ end -- __init()
 -- PUBLIC METHODS
 --------------------------------------------------------------------------------
 
-function SmootherKwavg:estimate(obsIndex, k)
-   local debug = 0
-   --debug = 1 -- zero value for lambda
-   local v, isVerbose = makeVerbose(false, 'SmootherKwavg:estimate')
+function NnwSmootherLlr:estimate(obsIndex, params)
+   local v, isVerbose = makeVerbose(false, 'NnwSmootherLlr:estimate')
    verify(v, isVerbose,
           {{obsIndex, 'obsIndex', 'isIntegerPositive'},
-           {k, 'k', 'isIntegerPositive'}})
+           {params, 'params', 'isTable'}})
    v('self', self)
+
+   affirm.isIntegerPositive(params.k, 'params.k')
+   affirm.isNumberNonNegative(params.regularizer, 'params.regularizer')
+
+   local k = params.k
+
    assert(k <= Nncachebuilder:maxNeighbors())
 
    -- determine distances and lambda
+   -- NOTE: code is the same as in SmootherKwavg:estimate
    local nObs = self._visible:size(1)
    local distances = torch.Tensor(nObs):fill(1e100)
    local query = self._allXs[obsIndex]
@@ -59,7 +60,7 @@ function SmootherKwavg:estimate(obsIndex, k)
    for i = 1, nObs do
       local obsIndex = sortedNeighborIndices[i]
       if self._visible[obsIndex] == 1 then
-         local distance= Nn.euclideanDistance(self._allXs[obsIndex], query)
+         local distance= Nnw.euclideanDistance(self._allXs[obsIndex], query)
          distances[i] = distance
          if debug == 1 then
             v('x', self._allXs[obsIndex])
@@ -72,6 +73,7 @@ function SmootherKwavg:estimate(obsIndex, k)
          end
       end
    end
+
    v('lambda', lambda)
    v('distances', distances)
 
@@ -79,14 +81,17 @@ function SmootherKwavg:estimate(obsIndex, k)
       return false, 'lambda == 0'
    end
 
-   local weights = Nn.weights(distances, lambda)
+   local weights = Nnw.weights(distances, lambda)
    v('weights', weights)
 
-   local ok, estimate = Nn.estimateKwavg(k,
-                                         sortedNeighborIndices,
-                                         self._visible,
-                                         weights,
-                                         self._allYs)
+   local ok, estimate = Nnw.estimateLlr(k,
+                                        params.regularizer,
+                                        sortedNeighborIndices,
+                                        self._visible,
+                                        weights,
+                                        self._allXs[obsIndex]:clone(),
+                                        self._allXs,
+                                        self._allYs)
    v('ok, estimate', ok, estimate)
    return ok, estimate 
 end -- estimate

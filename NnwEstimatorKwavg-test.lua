@@ -1,4 +1,4 @@
--- EstimatorKwavg-test.lua
+-- NnwEstimatorKwavg-test.lua
 -- unit tests
 
 require 'all'
@@ -33,7 +33,7 @@ function tests.one()
    local function test(k, expected)
       v('k', k)
       v('expected', expected)
-      local knn = EstimatorKwavg(xs, ys, 'epanechnikov quadratic')
+      local knn = NnwEstimatorKwavg(xs, ys, 'epanechnikov quadratic')
       local ok, estimate = knn:estimate(query, k)
       local tol = 1e-3
       tester:assert(ok)

@@ -1,5 +1,5 @@
--- EstimatorAvg-test.lua
--- unit tests for class EstimatorAvg
+-- NnwEstimatorAvg-test.lua
+-- unit tests for class NnwEstimatorAvg
 
 require 'all'
 
@@ -29,7 +29,8 @@ function tests.estimator()
 
    local function test(k, expected)
       --v('xs', xs)
-      local knn = EstimatorAvg(xs, ys)
+      local knn = NnwEstimatorAvg(xs, ys)
+      v('knn', knn)
       local ok, estimate = knn:estimate(query, k)
       v('ok,estimate', ok, estimate)
       tester:assert(ok)
