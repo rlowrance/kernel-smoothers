@@ -47,7 +47,6 @@ function Nncache.load(filePath)
    local nnc = torch.load(filePath,
                           Nncachebuilder.format())
    --v('nnc', nnc)
-   v('nnc:size()', nnc:size())
    v('typename', torch.typename(nnc))
    assert(torch.typename(nnc) == 'Nncache',
           'bad typename  = ' .. tostring(torch.typename(nnc)))
